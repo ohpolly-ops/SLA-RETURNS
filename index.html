@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Oh Polly — Returns SLA & Capacity (v3.3)</title>
+<title>Oh Polly — Returns SLA & Capacity (v3.5)</title>
 <style>
   :root{--bg:#160d12;--card:#20131b;--br:#3c2030;--text:#ffeef6;--muted:#f6c7d9;
   --accent:#ff8cc6;--accent-2:#ff65b2;--good:#16a34a;--warn:#f59e0b;--bad:#ef4444;}
   *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);
   font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
-  .wrap{max-width:1100px;margin:0 auto;padding:24px}
+  .wrap{max-width:1150px;margin:0 auto;padding:24px}
   h1{margin:10px 0 4px;font-weight:800;letter-spacing:.3px;background:linear-gradient(90deg,#ffd1e6,#ff8cc6 60%,#ffd1e6);
       -webkit-background-clip:text;background-clip:text;color:transparent}
-  .lead{color:var(--muted)}.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+  .lead{color:var(--muted)}.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
   .card{background:var(--card);border:1px solid var(--br);border-radius:14px;padding:14px;box-shadow:0 10px 24px rgba(255,140,198,.06)}
   label{display:flex;justify-content:space-between;gap:10px;margin:8px 0;font-weight:700}
   input[type=number],input[type=text],input[type=date]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--br);background:#281722;color:var(--text)}
@@ -30,6 +30,9 @@
   #gate{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:20}
   #gate.hide{display:none!important}#gate .dlg{background:#1a1017;border:1px solid var(--br);border-radius:14px;padding:16px;max-width:360px;width:92%;box-shadow:0 10px 24px rgba(255,140,198,.1)}
   .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}footer{margin-top:16px;color:var(--muted);font-size:12px;text-align:right}
+  .stack{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .switch{display:flex;gap:8px;align-items:center}
+  .pill{background:#1a1017;border:1px solid var(--br);border-radius:12px;padding:8px 10px}
 </style>
 </head>
 <body>
@@ -48,7 +51,7 @@
 
 <div class="wrap">
   <h1>Returns SLA & Capacity</h1>
-  <p class="lead">Enter: <b>UK pallets by courier</b> (Asda, Evri, InPost/Other), <b>INT pallets</b>, <b>oldest dates</b>, and <b>total person-hours available for returns</b>. We’ll tell you how many hours (and FTE @ 11h) are needed to get back to <b>Green</b> (&lt;5d). Achievable rate = <b>30 items/h</b>.</p>
+  <p class="lead">Enter: <b>UK pallets by courier</b> (Asda, Evri, InPost/Other), <b>INT pallets</b>, <b>oldest dates</b>, <b>unpacked orders (UK & INT)</b>, and <b>total person-hours available for returns</b>. We’ll tell you how many hours (and FTE @ 11h) are needed to get back to <b>Green</b> (&lt;5d). Achievable rate = <b>30 items/h</b>, <b>1.9 lines per order</b>.</p>
 
   <div class="grid">
     <div class="card">
@@ -62,11 +65,15 @@
         <div><label>INT pallets</label><input id="intPallets" type="number" min="0" step="1" value="0"/></div>
       </div>
       <div class="row">
+        <div><label>Unpacked orders — UK</label><input id="ukUnpacked" type="number" min="0" step="1" value="0"/></div>
+        <div><label>Unpacked orders — INT</label><input id="intUnpacked" type="number" min="0" step="1" value="0"/></div>
+      </div>
+      <div class="row">
         <div><label>Oldest UK date</label><input id="ukDate" type="date"/></div>
         <div><label>Oldest INT date</label><input id="intDate" type="date"/></div>
       </div>
       <div class="row">
-        <div><label>Lines per parcel</label><input id="lpp" type="number" value="1.9" step="0.1" disabled/><div class="hint">Conversion: Asda=140 • Evri=170 • InPost/Other=140 • INT=140</div></div>
+        <div><label>Lines per <b>order</b></label><input id="lpp" type="number" value="1.9" step="0.1" disabled/><div class="hint">Conversion: Asda=140 parcels/pallet • Evri=170 • InPost/Other=140 • INT=140</div></div>
         <div></div>
       </div>
       <div class="row">
@@ -76,6 +83,18 @@
       <div class="row">
         <div><label>Optional OT hours (extra pool)</label><input id="extraHours" type="number" min="0" step="0.1" value="0"/></div>
         <div><label>Slack webhook (optional)</label><input id="slackUrl" type="text" placeholder="https://hooks.slack.com/services/..."/></div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Sheets log webhook (optional)</label>
+          <input id="logUrl" type="text" placeholder="https://script.google.com/macros/s/XXXX/exec"/>
+          <div class="stack">
+            <span class="switch"><input id="autoSend" type="checkbox" checked/> <span class="hint">Auto-send snapshots on change</span></span>
+            <button id="sendSnap" class="out">Send snapshot now</button>
+            <button id="exportCsv" class="out">Export CSV Log</button>
+            <button id="clearLog" class="out">Clear Log</button>
+          </div>
+        </div>
       </div>
       <div class="actions">
         <button id="calcBtn">Calculate now</button>
@@ -89,8 +108,8 @@
     <div class="card">
       <h2>Results</h2>
       <div class="kpi">
-        <div class="tile"><div class="muted">Total items (UK)</div><div class="num" id="ukItems">—</div><div class="hint">from pallets</div></div>
-        <div class="tile"><div class="muted">Total items (INT)</div><div class="num" id="intItems">—</div><div class="hint">from pallets</div></div>
+        <div class="tile"><div class="muted">Total items (UK)</div><div class="num" id="ukItems">—</div><div class="hint">pallets + unpacked</div></div>
+        <div class="tile"><div class="muted">Total items (INT)</div><div class="num" id="intItems">—</div><div class="hint">pallets + unpacked</div></div>
         <div class="tile"><div class="muted">Hours to Green (UK)</div><div class="num" id="ukHrs">—</div><div class="hint">clear ≥5-day items</div></div>
         <div class="tile"><div class="muted">Hours to Green (INT)</div><div class="num" id="intHrs">—</div><div class="hint">clear ≥5-day items</div></div>
       </div>
@@ -108,13 +127,13 @@
 
     <div class="card">
       <h2>Plan for Today</h2>
-      <div id="plan" class="muted">Enter pallets, dates & hours to see the plan.</div>
+      <div id="plan" class="muted">Enter pallets, dates, unpacked orders & hours to see the plan.</div>
     </div>
 
     <div class="card">
       <h2>Traffic Log</h2>
       <table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Note</th></tr></thead><tbody id="log"></tbody></table>
-      <footer>v3.3 • cache-bust tip: add <code>?v=1757070483</code> to the URL</footer>
+      <footer>v3.5 • cache-bust tip: add <code>?v=1757073820</code> to the URL</footer>
     </div>
   </div>
 </div>
@@ -122,7 +141,7 @@
 <script>
 (function(){
   const $=id=>document.getElementById(id), fmt=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
-  const P_ASDA=140,P_EVRI=170,P_OTHER=140,P_INTL=140,RATE=30,FTE_H=11,LPP=1.9;
+  const P_ASDA=140,P_EVRI=170,P_OTHER=140,P_INTL=140,RATE=30,FTE_H=11,LPO=1.9; // lines per order
 
   function badge(age){ if(age>=10) return ['b-bad','Red']; if(age>=5) return ['b-warn','Amber']; return ['b-good','Green']; }
   function todayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
@@ -130,11 +149,11 @@
   function fracOlder(age){ if(age<5) return 0; return Math.min(1,(age-4)/Math.max(1,age)); }
 
   function addLogRow(r){ const tr=document.createElement('tr'); tr.innerHTML = `<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]||''}</td>`; $('log').appendChild(tr); }
-  function log(action,note=""){ try{ const who=localStorage.getItem('sla_viewer')||"(anon)"; const row=[new Date().toISOString(),who,action,note]; addLogRow(row); const key='sla_log2'; const a=JSON.parse(localStorage.getItem(key)||'[]'); a.push(row); localStorage.setItem(key,JSON.stringify(a.slice(-500))); }catch(e){} }
+  function logEvent(action,note=""){ try{ const who=localStorage.getItem('sla_viewer')||"(anon)"; const row=[new Date().toISOString(),who,action,note]; addLogRow(row); const key='sla_log2'; const a=JSON.parse(localStorage.getItem(key)||'[]'); a.push(row); localStorage.setItem(key,JSON.stringify(a.slice(-1000))); }catch(e){} }
   function loadLog(){ try{ (JSON.parse(localStorage.getItem('sla_log2')||'[]')).forEach(addLogRow);}catch(e){} }
 
   function fillGate(){ let seen=null; try{ seen=localStorage.getItem('sla_viewer'); }catch(e){} if(!seen){ $('gate').classList.remove('hide'); } }
-  function closeGate(nm){ try{ localStorage.setItem('sla_viewer',nm);}catch(e){} $('gate').classList.add('hide'); log('enter'); }
+  function closeGate(nm){ try{ localStorage.setItem('sla_viewer',nm);}catch(e){} $('gate').classList.add('hide'); logEvent('enter'); }
   $('enterBtn').onclick=()=>{ const n=$('viewer').value.trim(); if(!n){ $('gateWarn').textContent='Name required'; return;} closeGate(n); };
   $('enterCancel').onclick=()=>{ $('gateWarn').textContent='Name required to view'; };
   $('viewer').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('enterBtn').click(); }});
@@ -144,28 +163,55 @@
 
   function compute(){
     const ukAsda=num('ukAsda'), ukEvri=num('ukEvri'), ukOther=num('ukOther'), intPallets=num('intPallets');
+    const ukUnp=num('ukUnpacked'), intUnp=num('intUnpacked');
+
     const ukParcels=ukAsda*P_ASDA + ukEvri*P_EVRI + ukOther*P_OTHER;
     const intParcels=intPallets*P_INTL;
-    const ukItems=ukParcels*LPP, intItems=intParcels*LPP;
+    const itemsFromPalletsUK = ukParcels * LPO;
+    const itemsFromPalletsINT = intParcels * LPO;
+
+    const itemsUnpUK = ukUnp * LPO;
+    const itemsUnpINT = intUnp * LPO;
+
+    const ukItems = itemsFromPalletsUK + itemsUnpUK;
+    const intItems = itemsFromPalletsINT + itemsUnpINT;
+
     const ageUK=daysSince(txt('ukDate')), ageINT=daysSince(txt('intDate'));
     const itemsRiskUK=ukItems*fracOlder(ageUK), itemsRiskINT=intItems*fracOlder(ageINT);
     const hrsUK=itemsRiskUK/RATE, hrsINT=itemsRiskINT/RATE;
+
     const avail=num('availHours') + num('extraHours');
     const capacityItems=RATE*avail;
     const needHours=hrsUK + hrsINT, deficitHours=Math.max(0, needHours - avail);
+
     const olderFirst=ageUK>=ageINT?'UK':'INT'; let allocUK=0, allocINT=0, rem=avail;
     if(olderFirst==='UK'){ allocUK=Math.min(hrsUK,rem); rem-=allocUK; allocINT=Math.min(hrsINT,rem); }
     else { allocINT=Math.min(hrsINT,rem); rem-=allocINT; allocUK=Math.min(hrsUK,rem); }
+
     const fteUK_target=Math.ceil(hrsUK/FTE_H), fteINT_target=Math.ceil(hrsINT/FTE_H);
-    return { ukItems,intItems,ageUK,ageINT,itemsRiskUK,itemsRiskINT,hrsUK,hrsINT,avail,capacityItems,deficitHours,allocUK,allocINT,fteUK_target,fteINT_target,ukAsda,ukEvri,ukOther,intPallets };
+
+    return { ukItems,intItems,ageUK,ageINT,itemsRiskUK,itemsRiskINT,hrsUK,hrsINT,avail,capacityItems,deficitHours,allocUK,allocINT,fteUK_target,fteINT_target,ukAsda,ukEvri,ukOther,intPallets,ukUnp,intUnp,itemsUnpUK,itemsUnpINT,itemsFromPalletsUK,itemsFromPalletsINT };
+  }
+
+  function currentSnapshot(){
+    const r = compute();
+    const who = localStorage.getItem('sla_viewer') || '(anon)';
+    return Object.assign({
+      timestamp: new Date().toISOString(),
+      viewer: who,
+      version: "v3.5",
+      site: location.href,
+      rate: RATE, lines_per_order: LPO
+    }, r);
   }
 
   function summaryText(r){
     const who=(localStorage.getItem('sla_viewer')||'(anon)');
     return [
-      '*Returns SLA — Plan*  (v3.3)',
+      '*Returns SLA — Plan*  (v3.5)',
       'Viewer: '+who+'  •  Time: '+new Date().toLocaleString(),
       'Oldest age — UK: '+r.ageUK+'d  |  INT: '+r.ageINT+'d',
+      'Unpacked orders — UK: '+r.ukUnp+'  |  INT: '+r.intUnp,
       'Backlog items ≥5d — UK: '+Math.round(r.itemsRiskUK)+'  |  INT: '+Math.round(r.itemsRiskINT),
       'Hours to Green — UK: '+Math.ceil(r.hrsUK)+'h  |  INT: '+Math.ceil(r.hrsINT)+'h  (rate 30/h)',
       'Available today: '+Math.round(r.avail)+'h  → capacity '+Math.round(r.capacityItems)+' items',
@@ -187,54 +233,104 @@
       $('ukBadge').innerHTML = `<span class="badge ${c1}">${t1}</span>`;
       $('intBadge').innerHTML = `<span class="badge ${c2}">${t2}</span>`;
 
-      $('tbl').innerHTML = `<tr><td>Oldest age (days)</td><td>${r.ageUK}</td><td>${r.ageINT}</td></tr>
+      $('tbl').innerHTML = `
+        <tr><td>Oldest age (days)</td><td>${r.ageUK}</td><td>${r.ageINT}</td></tr>
         <tr><td>UK pallets (Asda / Evri / Other)</td><td>${r.ukAsda} / ${r.ukEvri} / ${r.ukOther}</td><td>${r.intPallets}</td></tr>
+        <tr><td>Unpacked orders</td><td>${fmt(r.ukUnp)}</td><td>${fmt(r.intUnp)}</td></tr>
+        <tr><td>Items from pallets</td><td>${fmt(r.itemsFromPalletsUK)}</td><td>${fmt(r.itemsFromPalletsINT)}</td></tr>
+        <tr><td>Items from unpacked</td><td>${fmt(r.itemsUnpUK)}</td><td>${fmt(r.itemsUnpINT)}</td></tr>
         <tr><td>Total items</td><td>${fmt(r.ukItems)}</td><td>${fmt(r.intItems)}</td></tr>
         <tr><td>Items ≥5d (to clear)</td><td>${fmt(r.itemsRiskUK)}</td><td>${fmt(r.itemsRiskINT)}</td></tr>`;
 
-      const plan=[];
-      plan.push(`Available person-hours (incl. OT): <b>${Math.round(r.avail)}</b> → capacity <b>${fmt(r.capacityItems)}</b> items.`);
-      plan.push(`Work to reach <b>Green</b> today (clear ≥5-day items): UK <b>${fmt(r.itemsRiskUK)}</b> items → <b>${fmt(Math.ceil(r.hrsUK))}</b> h; INT <b>${fmt(r.itemsRiskINT)}</b> items → <b>${fmt(Math.ceil(r.hrsINT))}</b> h.`);
-      if(r.deficitHours<=0){
-        plan.push(`<b>You can reach Green without extra hours.</b> Suggested allocation today: UK <b>${fmt(Math.ceil(r.allocUK))}</b> h, INT <b>${fmt(Math.ceil(r.allocINT))}</b> h (prioritise the older stream first).`);
-      } else {
-        plan.push(`<b>Short by ${fmt(Math.ceil(r.deficitHours))} hours.</b> Add ~<b>${fmt(Math.ceil(r.deficitHours))}</b> OT hours total (≈ <b>${Math.ceil(r.deficitHours/11)}</b> FTE @ 11h).`);
-      }
-      plan.push(`Tactic: allocate hours to the older stream first; re-balance once it reaches ≤5d.`);
-      $('plan').innerHTML = plan.join('<br>');
+      $('plan').innerHTML = [
+        `Available person-hours (incl. OT): <b>${Math.round(r.avail)}</b> → capacity <b>${fmt(r.capacityItems)}</b> items.`,
+        `Work to reach <b>Green</b> today (clear ≥5-day items): UK <b>${fmt(r.itemsRiskUK)}</b> items → <b>${fmt(Math.ceil(r.hrsUK))}</b> h; INT <b>${fmt(r.itemsRiskINT)}</b> items → <b>${fmt(Math.ceil(r.hrsINT))}</b> h.`,
+        r.deficitHours<=0 ? `<b>You can reach Green without extra hours.</b> Suggested allocation today: UK <b>${fmt(Math.ceil(r.allocUK))}</b> h, INT <b>${fmt(Math.ceil(r.allocINT))}</b> h (prioritise the older stream first).`
+                          : `<b>Short by ${fmt(Math.ceil(r.deficitHours))} hours.</b> Add ~<b>${fmt(Math.ceil(r.deficitHours))}</b> OT hours total (≈ <b>${Math.ceil(r.deficitHours/11)}</b> FTE @ 11h).`,
+        `Tactic: allocate hours to the older stream first; re-balance once it reaches ≤5d.`
+      ].join('<br>');
+
+      scheduleAutosend();
       $('hintMsg').textContent='';
-      return r; // expose for Slack copy/send
+      return r;
     }catch(e){
       $('hintMsg').textContent='Error: '+e.message;
       return null;
     }
   }
 
-  ['ukAsda','ukEvri','ukOther','intPallets','availHours','extraHours','ukDate','intDate']
+  // === Sheets logging ===
+  function exportCsv(){
+    try{
+      const key='sla_snapshots_v2';
+      const rows = JSON.parse(localStorage.getItem(key)||'[]');
+      if(!rows.length){ alert('No snapshots yet'); return; }
+      const header = Object.keys(rows[0]);
+      const lines = [header.join(',')];
+      rows.forEach(r=>lines.push(header.map(h=>JSON.stringify(r[h]??'')).join(',')));
+      const blob = new Blob([lines.join('\n')],{type:'text/csv'});
+      const url = URL.createObjectURL(blob); const a=document.createElement('a');
+      a.href=url; a.download='returns_sla_log.csv'; a.click(); URL.revokeObjectURL(url);
+    }catch(e){ alert('Export failed'); }
+  }
+  function clearCsv(){ localStorage.removeItem('sla_snapshots_v2'); logEvent('log_clear'); }
+
+  function saveLocalSnapshot(snap){
+    try{
+      const key='sla_snapshots_v2';
+      const arr = JSON.parse(localStorage.getItem(key)||'[]');
+      arr.push(snap); localStorage.setItem(key, JSON.stringify(arr.slice(-2000)));
+    }catch(e){}
+  }
+
+  async function sendSnapshot(now=false){
+    const url = $('logUrl').value.trim(); if(!url) return;
+    const snap = currentSnapshot(); saveLocalSnapshot(snap);
+    try{
+      await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(snap)});
+      if(now) $('hintMsg').textContent='Snapshot sent';
+      logEvent('snapshot','sent');
+    }catch(e){ if(now) $('hintMsg').textContent='Snapshot failed'; logEvent('snapshot','failed'); }
+  }
+
+  let debounceTimer=null;
+  function scheduleAutosend(){
+    if(!$('autoSend').checked) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(()=>sendSnapshot(false), 700);
+  }
+
+  // Wire logging controls
+  $('exportCsv').addEventListener('click', exportCsv);
+  $('clearLog').addEventListener('click', clearCsv);
+  $('sendSnap').addEventListener('click', ()=>sendSnapshot(true));
+
+  ['ukAsda','ukEvri','ukOther','intPallets','ukUnpacked','intUnpacked','availHours','extraHours','ukDate','intDate','logUrl','autoSend']
     .forEach(id=>{
       const el=$(id);
       ['input','change','keyup','blur'].forEach(evt=>el.addEventListener(evt, render));
     });
+
   $('calcBtn').addEventListener('click', render);
   $('resetBtn').addEventListener('click', ()=>{
-    ['ukAsda','ukEvri','ukOther','intPallets','availHours','extraHours'].forEach(id=>$(id).value=0);
+    ['ukAsda','ukEvri','ukOther','intPallets','ukUnpacked','intUnpacked','availHours','extraHours'].forEach(id=>$(id).value=0);
     $('ukDate').value=todayISO(); $('intDate').value=todayISO(); render();
   });
 
   $('copySlack').addEventListener('click', ()=>{
-    const r = render(); if(!r) return;
+    const r = compute(); if(!r) return;
     const text = summaryText(r);
-    navigator.clipboard.writeText(text).then(()=>{ $('hintMsg').textContent='Summary copied'; log('copy','slack'); })
+    navigator.clipboard.writeText(text).then(()=>{ $('hintMsg').textContent='Summary copied'; logEvent('copy','slack'); })
       .catch(()=>{ $('hintMsg').textContent='Copy blocked by browser'; });
   });
 
   $('sendSlack').addEventListener('click', async()=>{
     const url = $('slackUrl').value.trim();
-    const r = render(); if(!url || !r){ $('hintMsg').textContent='Add a Slack webhook URL first'; return; }
+    const r = compute(); if(!url || !r){ $('hintMsg').textContent='Add a Slack webhook URL first'; return; }
     const text = summaryText(r);
     try{
       await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
-      $('hintMsg').textContent='Sent to Slack'; log('slack','sent');
+      $('hintMsg').textContent='Sent to Slack'; logEvent('slack','sent');
     }catch(e){ $('hintMsg').textContent='Slack send failed'; }
   });
 
