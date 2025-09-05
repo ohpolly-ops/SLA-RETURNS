@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Oh Polly — Returns SLA & Capacity (v3.6)</title>
+<style>
+  :root{--bg:#160d12;--card:#20131b;--br:#3c2030;--text:#ffeef6;--muted:#f6c7d9;
+  --accent:#ff8cc6;--accent-2:#ff65b2;--good:#16a34a;--warn:#f59e0b;--bad:#ef4444;}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  .wrap{max-width:1150px;margin:0 auto;padding:24px}
+  h1{margin:10px 0 4px;font-weight:800;letter-spacing:.3px;background:linear-gradient(90deg,#ffd1e6,#ff8cc6 60%,#ffd1e6);
+      -webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{color:var(--muted)}.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+  .card{background:var(--card);border:1px solid var(--br);border-radius:14px;padding:14px;box-shadow:0 10px 24px rgba(255,140,198,.06)}
+  label{display:flex;justify-content:space-between;gap:10px;margin:8px 0;font-weight:700}
+  input[type=number],input[type=text],input[type=date]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--br);background:#281722;color:var(--text)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{display:grid;gap:10px;grid-template-columns:repeat(4,1fr)}.tile{background:#1a1017;border:1px solid var(--br);border-radius:12px;padding:12px}
+  .num{font-size:22px;font-weight:800}table{width:100%;border-collapse:collapse;margin-top:6px}
+  th,td{border-bottom:1px solid var(--br);padding:6px 8px;text-align:left}
+  .badge{font-weight:800;border-radius:999px;padding:3px 9px}
+  .b-good{background:rgba(22,163,74,.15);color:#86efac;border:1px solid rgba(22,163,74,.4)}
+  .b-warn{background:rgba(245,158,11,.12);color:#fde68a;border:1px solid rgba(245,158,11,.35)}
+  .b-bad{background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.35)}
+  button{border:1px solid transparent;background:var(--accent);color:#2b0f1d;font-weight:800;border-radius:10px;padding:9px 13px;cursor:pointer;transition:transform .05s ease, background .15s ease}
+  button:hover{background:var(--accent-2);transform:translateY(-1px)}button.out{background:transparent;color:var(--text);border:1px solid var(--br)}
+  .muted{color:var(--muted)}.hint{color:var(--muted);font-size:12px}
+  #gate{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:20}
+  #gate.hide{display:none!important}#gate .dlg{background:#1a1017;border:1px solid var(--br);border-radius:14px;padding:16px;max-width:360px;width:92%;box-shadow:0 10px 24px rgba(255,140,198,.1)}
+  .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}footer{margin-top:16px;color:var(--muted);font-size:12px;text-align:right}
+  .stack{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .switch{display:flex;gap:8px;align-items:center}
+  .pill{background:#1a1017;border:1px solid var(--br);border-radius:12px;padding:8px 10px}
+</style>
+</head>
+<body>
+<div id="gate" class="hide">
+  <div class="dlg">
+    <h3 style="margin:0 0 8px">Who’s viewing?</h3>
+    <p class="hint">Your name is logged with timestamps for the traffic log.</p>
+    <input id="viewer" type="text" placeholder="e.g., Jamie L"/>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button id="enterBtn">Enter</button>
+      <button id="enterCancel" class="out">Cancel</button>
+    </div>
+    <p id="gateWarn" class="hint" style="margin-top:8px"></p>
+  </div>
+</div>
+
+<div class="wrap">
+  <h1>Returns SLA & Capacity</h1>
+  <p class="lead">Enter: <b>UK pallets by courier</b> (Asda, Evri, InPost/Other), <b>INT pallets</b>, <b>oldest dates</b>, <b>unpacked orders (UK & INT)</b>, and <b>total person-hours available for returns</b>. We’ll tell you how many hours (and FTE @ 11h) are needed to get back to <b>Green</b> (&lt;5d). Achievable rate = <b>30 items/h</b>, <b>1.9 lines per order</b>.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Inputs</h2>
+      <div class="row">
+        <div><label>UK — Asda pallets</label><input id="ukAsda" type="number" min="0" step="1" value="0"/></div>
+        <div><label>UK — Evri pallets</label><input id="ukEvri" type="number" min="0" step="1" value="0"/></div>
+      </div>
+      <div class="row">
+        <div><label>UK — InPost/Other pallets</label><input id="ukOther" type="number" min="0" step="1" value="0"/></div>
+        <div><label>INT pallets</label><input id="intPallets" type="number" min="0" step="1" value="0"/></div>
+      </div>
+      <div class="row">
+        <div><label>Unpacked orders — UK</label><input id="ukUnpacked" type="number" min="0" step="1" value="0"/></div>
+        <div><label>Unpacked orders — INT</label><input id="intUnpacked" type="number" min="0" step="1" value="0"/></div>
+      </div>
+      <div class="row">
+        <div><label>Oldest UK date</label><input id="ukDate" type="date"/></div>
+        <div><label>Oldest INT date</label><input id="intDate" type="date"/></div>
+      </div>
+      <div class="row">
+        <div><label>Lines per <b>order</b></label><input id="lpp" type="number" value="1.9" step="0.1" disabled/><div class="hint">Conversion: Asda=140 parcels/pallet • Evri=170 • InPost/Other=140 • INT=140</div></div>
+        <div></div>
+      </div>
+      <div class="row">
+        <div><label><b>Achievable rate (items/h)</b></label><input id="rate" type="number" value="30" disabled/></div>
+        <div><label><b>Total person-hours available today</b></label><input id="availHours" type="number" min="0" step="0.1" value="0"/></div>
+      </div>
+      <div class="row">
+        <div><label>Optional OT hours (extra pool)</label><input id="extraHours" type="number" min="0" step="0.1" value="0"/></div>
+        <div><label>Sheets log webhook (optional)</label><input id="logUrl" type="text" placeholder="https://script.google.com/macros/s/XXXX/exec"/></div>
+      </div>
+      <div class="row">
+        <div><label>Slack webhook (optional)</label><input id="slackUrl" type="text" placeholder="https://hooks.slack.com/services/..."/></div>
+        <div class="stack">
+          <span class="switch"><input id="autoSend" type="checkbox" checked/> <span class="hint">Auto-send snapshots on change</span></span>
+          <button id="sendSnap" class="out">Send snapshot now</button>
+          <button id="exportCsv" class="out">Export CSV Log</button>
+          <button id="clearLog" class="out">Clear Log</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="calcBtn">Calculate now</button>
+        <button class="out" id="resetBtn">Reset</button>
+        <button id="copySlack" title="Copy a text summary you can paste into Slack">Copy Slack summary</button>
+        <button id="sendSlack" class="out" title="Send to Slack using webhook above">Send to Slack</button>
+        <span class="hint" id="hintMsg"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Results</h2>
+      <div class="kpi">
+        <div class="tile"><div class="muted">Total items (UK)</div><div class="num" id="ukItems">—</div><div class="hint">pallets + unpacked</div></div>
+        <div class="tile"><div class="muted">Total items (INT)</div><div class="num" id="intItems">—</div><div class="hint">pallets + unpacked</div></div>
+        <div class="tile"><div class="muted">Hours to Green (UK)</div><div class="num" id="ukHrs">—</div><div class="hint">clear ≥5-day items</div></div>
+        <div class="tile"><div class="muted">Hours to Green (INT)</div><div class="num" id="intHrs">—</div><div class="hint">clear ≥5-day items</div></div>
+      </div>
+      <div class="kpi" style="margin-top:8px">
+        <div class="tile"><div class="muted">FTE to Green (UK)</div><div class="num" id="ukFTE">—</div><div class="hint">@ 11h</div></div>
+        <div class="tile"><div class="muted">FTE to Green (INT)</div><div class="num" id="intFTE">—</div><div class="hint">@ 11h</div></div>
+        <div class="tile"><div class="muted">Oldest Age (UK)</div><div class="num" id="ukAge">—</div><div id="ukBadge" class="hint"></div></div>
+        <div class="tile"><div class="muted">Oldest Age (INT)</div><div class="num" id="intAge">—</div><div id="intBadge" class="hint"></div></div>
+      </div>
+      <table>
+        <thead><tr><th>Summary</th><th>UK</th><th>INT</th></tr></thead>
+        <tbody id="tbl"><tr><td>—</td><td></td><td></td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Plan for Today</h2>
+      <div id="plan" class="muted">Enter pallets, dates, unpacked orders & hours to see the plan.</div>
+    </div>
+
+    <div class="card">
+      <h2>Traffic Log</h2>
+      <table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Note</th></tr></thead><tbody id="log"></tbody></table>
+      <footer>v3.6 • cache-bust tip: add <code>?v=now</code> to the URL</footer>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id), fmt=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
+  const P_ASDA=140,P_EVRI=170,P_OTHER=140,P_INTL=140,RATE=30,FTE_H=11,LPO=1.9; // lines per order
+
+  function badge(age){ if(age>=10) return ['b-bad','Red']; if(age>=5) return ['b-warn','Amber']; return ['b-good','Green']; }
+  function todayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
+  function daysSince(s){ if(!s) return 0; const d=new Date(s+'T00:00:00'); const t=new Date(); d.setHours(0,0,0,0); t.setHours(0,0,0,0); return Math.max(0,Math.round((t-d)/86400000)); }
+  // crude share of items that are >=5d if age is A days
+  function fracOlder(age){ if(age<5) return 0; return Math.min(1,(age-4)/Math.max(1,age)); }
+
+  // --- Local traffic log (on page) ---
+  function addLogRow(r){ const tr=document.createElement('tr'); tr.innerHTML = `<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]||''}</td>`; $('log').appendChild(tr); }
+  function logEvent(action,note=""){ try{ const who=localStorage.getItem('sla_viewer')||"(anon)"; const row=[new Date().toISOString(),who,action,note]; addLogRow(row); const key='sla_log2'; const a=JSON.parse(localStorage.getItem(key)||'[]'); a.push(row); localStorage.setItem(key,JSON.stringify(a.slice(-1000))); }catch(e){} }
+  function loadLog(){ try{ (JSON.parse(localStorage.getItem('sla_log2')||'[]')).forEach(addLogRow);}catch(e){} }
+
+  // --- Name gate ---
+  function fillGate(){ let seen=null; try{ seen=localStorage.getItem('sla_viewer'); }catch(e){} if(!seen){ $('gate').classList.remove('hide'); } }
+  function closeGate(nm){ try{ localStorage.setItem('sla_viewer',nm);}catch(e){} $('gate').classList.add('hide'); logEvent('enter'); sendHeartbeat(); }
+  $('enterBtn').onclick=()=>{ const n=$('viewer').value.trim(); if(!n){ $('gateWarn').textContent='Name required'; return;} closeGate(n); };
+  $('enterCancel').onclick=()=>{ $('gateWarn').textContent='Name required to view'; };
+  $('viewer').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('enterBtn').click(); }});
+
+  // --- Helpers ---
+  function num(id){ const v=+($(id).value||0); return Number.isFinite(v)? v:0; }
+  function txt(id){ return $(id).value || ""; }
+
+  // --- Core calc ---
+  function compute(){
+    const ukAsda=num('ukAsda'), ukEvri=num('ukEvri'), ukOther=num('ukOther'), intPallets=num('intPallets');
+    const ukUnp=num('ukUnpacked'), intUnp=num('intUnpacked');
+
+    const ukParcels=ukAsda*P_ASDA + ukEvri*P_EVRI + ukOther*P_OTHER;
+    const intParcels=intPallets*P_INTL;
+    const itemsFromPalletsUK = ukParcels * LPO;
+    const itemsFromPalletsINT = intParcels * LPO;
+
+    const itemsUnpUK = ukUnp * LPO;
+    const itemsUnpINT = intUnp * LPO;
+
+    const ukItems = itemsFromPalletsUK + itemsUnpUK;
+    const intItems = itemsFromPalletsINT + itemsUnpINT;
+
+    const ageUK=daysSince(txt('ukDate')), ageINT=daysSince(txt('intDate'));
+    const itemsRiskUK=ukItems*fracOlder(ageUK), itemsRiskINT=intItems*fracOlder(ageINT);
+    const hrsUK=itemsRiskUK/RATE, hrsINT=itemsRiskINT/RATE;
+
+    const avail=num('availHours') + num('extraHours');
+    const capacityItems=RATE*avail;
+    const needHours=hrsUK + hrsINT, deficitHours=Math.max(0, needHours - avail);
+
+    const olderFirst=ageUK>=ageINT?'UK':'INT'; let allocUK=0, allocINT=0, rem=avail;
+    if(olderFirst==='UK'){ allocUK=Math.min(hrsUK,rem); rem-=allocUK; allocINT=Math.min(hrsINT,rem); }
+    else { allocINT=Math.min(hrsINT,rem); rem-=allocINT; allocUK=Math.min(hrsUK,rem); }
+
+    const fteUK_target=Math.ceil(hrsUK/FTE_H), fteINT_target=Math.ceil(hrsINT/FTE_H);
+
+    return { ukItems,intItems,ageUK,ageINT,itemsRiskUK,itemsRiskINT,hrsUK,hrsINT,avail,capacityItems,deficitHours,allocUK,allocINT,fteUK_target,fteINT_target,ukAsda,ukEvri,ukOther,intPallets,ukUnp,intUnp,itemsUnpUK,itemsUnpINT,itemsFromPalletsUK,itemsFromPalletsINT };
+  }
+
+  function currentSnapshot(){
+    const r = compute();
+    const who = localStorage.getItem('sla_viewer') || '(anon)';
+    return Object.assign({
+      timestamp: new Date().toISOString(),
+      viewer: who,
+      version: "v3.6",
+      site: location.href,
+      rate: RATE, lines_per_order: LPO,
+      event: 'snapshot'
+    }, r);
+  }
+
+  function summaryText(r){
+    const who=(localStorage.getItem('sla_viewer')||'(anon)');
+    return [
+      '*Returns SLA — Plan*  (v3.6)',
+      'Viewer: '+who+'  •  Time: '+new Date().toLocaleString(),
+      'Oldest age — UK: '+r.ageUK+'d  |  INT: '+r.ageINT+'d',
+      'Unpacked orders — UK: '+r.ukUnp+'  |  INT: '+r.intUnp,
+      'Backlog items ≥5d — UK: '+Math.round(r.itemsRiskUK)+'  |  INT: '+Math.round(r.itemsRiskINT),
+      'Hours to Green — UK: '+Math.ceil(r.hrsUK)+'h  |  INT: '+Math.ceil(r.hrsINT)+'h  (rate 30/h)',
+      'Available today: '+Math.round(r.avail)+'h  → capacity '+Math.round(r.capacityItems)+' items',
+      (r.deficitHours<=0 ? '✅ Can reach Green today. Allocate ~ UK '+Math.ceil(r.allocUK)+'h, INT '+Math.ceil(r.allocINT)+'h (older stream first).'
+                         : '⚠️ Short by ~'+Math.ceil(r.deficitHours)+'h → add OT ~'+Math.ceil(r.deficitHours)+'h (≈ '+Math.ceil(r.deficitHours/11)+' FTE @11h).')
+    ].join('\n');
+  }
+
+  function badgeWrite(el,age){ const x=badge(age); el.innerHTML = `<span class="badge ${x[0]}">${x[1]}</span>`; }
+
+  function render(){
+    try{
+      const r=compute();
+      $('ukItems').textContent = fmt(r.ukItems); $('intItems').textContent = fmt(r.intItems);
+      $('ukHrs').textContent = isFinite(r.hrsUK)? Math.ceil(r.hrsUK):'—';
+      $('intHrs').textContent = isFinite(r.hrsINT)? Math.ceil(r.hrsINT):'—';
+      $('ukFTE').textContent = isFinite(r.fteUK_target)? r.fteUK_target:'—';
+      $('intFTE').textContent = isFinite(r.fteINT_target)? r.fteINT_target:'—';
+      $('ukAge').textContent = r.ageUK||0; $('intAge').textContent = r.ageINT||0;
+      const [c1,t1]= (age=>age>=10?['b-bad','Red']:age>=5?['b-warn','Amber']:['b-good','Green'])(r.ageUK);
+      const [c2,t2]= (age=>age>=10?['b-bad','Red']:age>=5?['b-warn','Amber']:['b-good','Green'])(r.ageINT);
+      $('ukBadge').innerHTML = `<span class="badge ${c1}">${t1}</span>`;
+      $('intBadge').innerHTML = `<span class="badge ${c2}">${t2}</span>`;
+
+      $('tbl').innerHTML = `
+        <tr><td>Oldest age (days)</td><td>${r.ageUK}</td><td>${r.ageINT}</td></tr>
+        <tr><td>UK pallets (Asda / Evri / Other)</td><td>${r.ukAsda} / ${r.ukEvri} / ${r.ukOther}</td><td>${r.intPallets}</td></tr>
+        <tr><td>Unpacked orders</td><td>${fmt(r.ukUnp)}</td><td>${fmt(r.intUnp)}</td></tr>
+        <tr><td>Items from pallets</td><td>${fmt(r.itemsFromPalletsUK)}</td><td>${fmt(r.itemsFromPalletsINT)}</td></tr>
+        <tr><td>Items from unpacked</td><td>${fmt(r.itemsUnpUK)}</td><td>${fmt(r.itemsUnpINT)}</td></tr>
+        <tr><td>Total items</td><td>${fmt(r.ukItems)}</td><td>${fmt(r.intItems)}</td></tr>
+        <tr><td>Items ≥5d (to clear)</td><td>${fmt(r.itemsRiskUK)}</td><td>${fmt(r.itemsRiskINT)}</td></tr>`;
+
+      $('plan').innerHTML = [
+        `Available person-hours (incl. OT): <b>${Math.round(r.avail)}</b> → capacity <b>${fmt(r.capacityItems)}</b> items.`,
+        `Work to reach <b>Green</b> today (clear ≥5-day items): UK <b>${fmt(r.itemsRiskUK)}</b> items → <b>${fmt(Math.ceil(r.hrsUK))}</b> h; INT <b>${fmt(r.itemsRiskINT)}</b> items → <b>${fmt(Math.ceil(r.hrsINT))}</b> h.`,
+        r.deficitHours<=0 ? `<b>You can reach Green without extra hours.</b> Suggested allocation today: UK <b>${fmt(Math.ceil(r.allocUK))}</b> h, INT <b>${fmt(Math.ceil(r.allocINT))}</b> h (prioritise the older stream first).`
+                          : `<b>Short by ${fmt(Math.ceil(r.deficitHours))} hours.</b> Add ~<b>${fmt(Math.ceil(r.deficitHours))}</b> OT hours total (≈ <b>${Math.ceil(r.deficitHours/11)}</b> FTE @ 11h).`,
+        `Tactic: allocate hours to the older stream first; re-balance once it reaches ≤5d.`
+      ].join('<br>');
+
+      scheduleAutosend();
+      $('hintMsg').textContent='';
+      return r;
+    }catch(e){
+      $('hintMsg').textContent='Error: '+e.message;
+      return null;
+    }
+  }
+
+  // === Sheets logging ===
+  function normalizeAppsScriptUrl(u){
+    if(!u) return '';
+    // Accept domain-scoped URLs and convert to generic if needed
+    return u.replace('/a/macros/ohpolly.com/','/macros/');
+  }
+  async function postToSheet(url,data){
+    const execUrl=normalizeAppsScriptUrl(url);
+    return fetch(execUrl,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(data),
+      credentials:'include', // works for domain-scoped deployments
+      mode:'cors'
+    });
+  }
+
+  function exportCsv(){
+    try{
+      const key='sla_snapshots_v2';
+      const rows = JSON.parse(localStorage.getItem(key)||'[]');
+      if(!rows.length){ alert('No snapshots yet'); return; }
+      const header = Object.keys(rows[0]);
+      const lines = [header.join(',')];
+      rows.forEach(r=>lines.push(header.map(h=>JSON.stringify(r[h]??'')).join(',')));
+      const blob = new Blob([lines.join('\n')],{type:'text/csv'});
+      const url = URL.createObjectURL(blob); const a=document.createElement('a');
+      a.href=url; a.download='returns_sla_log.csv'; a.click(); URL.revokeObjectURL(url);
+    }catch(e){ alert('Export failed'); }
+  }
+  function clearCsv(){ localStorage.removeItem('sla_snapshots_v2'); logEvent('log_clear'); }
+  function saveLocalSnapshot(snap){
+    try{
+      const key='sla_snapshots_v2';
+      const arr = JSON.parse(localStorage.getItem(key)||'[]');
+      arr.push(snap); localStorage.setItem(key, JSON.stringify(arr.slice(-2000)));
+    }catch(e){}
+  }
+
+  async function sendSnapshot(now=false){
+    const url = $('logUrl').value.trim(); if(!url) return;
+    const snap = currentSnapshot(); saveLocalSnapshot(snap);
+    try{
+      await postToSheet(url,snap);
+      if(now) $('hintMsg').textContent='Snapshot sent';
+      logEvent('snapshot','sent');
+    }catch(e){
+      if(now) $('hintMsg').textContent='Snapshot failed';
+      logEvent('snapshot','failed');
+    }
+  }
+
+  let debounceTimer=null;
+  function scheduleAutosend(){
+    if(!$('autoSend').checked) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(()=>sendSnapshot(false), 700);
+  }
+
+  // Heartbeat: logs viewer presence every 90s
+  async function sendHeartbeat(){
+    const url=$('logUrl').value.trim(); if(!url) return;
+    const who=localStorage.getItem('sla_viewer')||'(anon)';
+    const payload={timestamp:new Date().toISOString(),viewer:who,version:"v3.6",site:location.href,event:'heartbeat'};
+    try{ await postToSheet(url,payload); }catch(e){}
+  }
+
+  // Wire UI
+  $('exportCsv').addEventListener('click', exportCsv);
+  $('clearLog').addEventListener('click', clearCsv);
+  $('sendSnap').addEventListener('click', ()=>sendSnapshot(true));
+
+  ['ukAsda','ukEvri','ukOther','intPallets','ukUnpacked','intUnpacked','availHours','extraHours','ukDate','intDate','logUrl','autoSend']
+    .forEach(id=>{
+      const el=$(id);
+      ['input','change','keyup','blur'].forEach(evt=>el.addEventListener(evt, render));
+    });
+
+  $('calcBtn').addEventListener('click', render);
+  $('resetBtn').addEventListener('click', ()=>{
+    ['ukAsda','ukEvri','ukOther','intPallets','ukUnpacked','intUnpacked','availHours','extraHours'].forEach(id=>$(id).value=0);
+    $('ukDate').value=todayISO(); $('intDate').value=todayISO(); render();
+  });
+
+  $('copySlack').addEventListener('click', ()=>{
+    const r = compute(); if(!r) return;
+    const text = summaryText(r);
+    navigator.clipboard.writeText(text).then(()=>{ $('hintMsg').textContent='Summary copied'; logEvent('copy','slack'); })
+      .catch(()=>{ $('hintMsg').textContent='Copy blocked by browser'; });
+  });
+
+  $('sendSlack').addEventListener('click', async()=>{
+    const url = $('slackUrl').value.trim();
+    const r = compute(); if(!url || !r){ $('hintMsg').textContent='Add a Slack webhook URL first'; return; }
+    const text = summaryText(r);
+    try{
+      await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+      $('hintMsg').textContent='Sent to Slack'; logEvent('slack','sent');
+    }catch(e){ $('hintMsg').textContent='Slack send failed'; }
+  });
+
+  (function init(){
+    $('ukDate').value = todayISO(); $('intDate').value=todayISO();
+    fillGate(); loadLog(); render();
+    setInterval(sendHeartbeat, 90000);
+  })();
+})();
+</script>
+</body>
+</html>
