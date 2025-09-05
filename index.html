@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Oh Polly — Returns SLA & Capacity (v3.5)</title>
+<title>Oh Polly — Returns SLA & Capacity (v3.6)</title>
 <style>
   :root{--bg:#160d12;--card:#20131b;--br:#3c2030;--text:#ffeef6;--muted:#f6c7d9;
   --accent:#ff8cc6;--accent-2:#ff65b2;--good:#16a34a;--warn:#f59e0b;--bad:#ef4444;}
@@ -82,18 +82,15 @@
       </div>
       <div class="row">
         <div><label>Optional OT hours (extra pool)</label><input id="extraHours" type="number" min="0" step="0.1" value="0"/></div>
-        <div><label>Slack webhook (optional)</label><input id="slackUrl" type="text" placeholder="https://hooks.slack.com/services/..."/></div>
+        <div><label>Sheets log webhook (optional)</label><input id="logUrl" type="text" placeholder="https://script.google.com/macros/s/XXXX/exec"/></div>
       </div>
       <div class="row">
-        <div>
-          <label>Sheets log webhook (optional)</label>
-          <input id="logUrl" type="text" placeholder="https://script.google.com/macros/s/XXXX/exec"/>
-          <div class="stack">
-            <span class="switch"><input id="autoSend" type="checkbox" checked/> <span class="hint">Auto-send snapshots on change</span></span>
-            <button id="sendSnap" class="out">Send snapshot now</button>
-            <button id="exportCsv" class="out">Export CSV Log</button>
-            <button id="clearLog" class="out">Clear Log</button>
-          </div>
+        <div><label>Slack webhook (optional)</label><input id="slackUrl" type="text" placeholder="https://hooks.slack.com/services/..."/></div>
+        <div class="stack">
+          <span class="switch"><input id="autoSend" type="checkbox" checked/> <span class="hint">Auto-send snapshots on change</span></span>
+          <button id="sendSnap" class="out">Send snapshot now</button>
+          <button id="exportCsv" class="out">Export CSV Log</button>
+          <button id="clearLog" class="out">Clear Log</button>
         </div>
       </div>
       <div class="actions">
@@ -133,7 +130,7 @@
     <div class="card">
       <h2>Traffic Log</h2>
       <table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Note</th></tr></thead><tbody id="log"></tbody></table>
-      <footer>v3.5 • cache-bust tip: add <code>?v=1757073820</code> to the URL</footer>
+      <footer>v3.6 • cache-bust tip: add <code>?v=now</code> to the URL</footer>
     </div>
   </div>
 </div>
@@ -153,7 +150,8 @@
   function loadLog(){ try{ (JSON.parse(localStorage.getItem('sla_log2')||'[]')).forEach(addLogRow);}catch(e){} }
 
   function fillGate(){ let seen=null; try{ seen=localStorage.getItem('sla_viewer'); }catch(e){} if(!seen){ $('gate').classList.remove('hide'); } }
-  function closeGate(nm){ try{ localStorage.setItem('sla_viewer',nm);}catch(e){} $('gate').classList.add('hide'); logEvent('enter'); }
+  function closeGate(nm){ try{ localStorage.setItem('sla_viewer',nm);}catch(e){} $('gate').classList.add('hide'); logEvent('enter'); sendHeartbeat(); }
+
   $('enterBtn').onclick=()=>{ const n=$('viewer').value.trim(); if(!n){ $('gateWarn').textContent='Name required'; return;} closeGate(n); };
   $('enterCancel').onclick=()=>{ $('gateWarn').textContent='Name required to view'; };
   $('viewer').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('enterBtn').click(); }});
@@ -199,24 +197,25 @@
     return Object.assign({
       timestamp: new Date().toISOString(),
       viewer: who,
-      version: "v3.5",
+      version: "v3.6",
       site: location.href,
-      rate: RATE, lines_per_order: LPO
+      rate: RATE, lines_per_order: LPO,
+      event: 'snapshot'
     }, r);
   }
 
   function summaryText(r){
     const who=(localStorage.getItem('sla_viewer')||'(anon)');
     return [
-      '*Returns SLA — Plan*  (v3.5)',
+      '*Returns SLA — Plan*  (v3.6)',
       'Viewer: '+who+'  •  Time: '+new Date().toLocaleString(),
       'Oldest age — UK: '+r.ageUK+'d  |  INT: '+r.ageINT+'d',
       'Unpacked orders — UK: '+r.ukUnp+'  |  INT: '+r.intUnp,
       'Backlog items ≥5d — UK: '+Math.round(r.itemsRiskUK)+'  |  INT: '+Math.round(r.itemsRiskINT),
       'Hours to Green — UK: '+Math.ceil(r.hrsUK)+'h  |  INT: '+Math.ceil(r.hrsINT)+'h  (rate 30/h)',
       'Available today: '+Math.round(r.avail)+'h  → capacity '+Math.round(r.capacityItems)+' items',
-      (r.deficitHours<=0 ? '✅ Can reach Green today. Allocate ~ UK '+Math.ceil(r.allocUK)+'h, INT '+Math.ceil(r.allocINT)+'h (older stream first).' :
-                           '⚠️ Short by ~'+Math.ceil(r.deficitHours)+'h → add OT ~'+Math.ceil(r.deficitHours)+'h (≈ '+Math.ceil(r.deficitHours/11)+' FTE @11h).')
+      (r.deficitHours<=0 ? '✅ Can reach Green today. Allocate ~ UK '+Math.ceil(r.allocUK)+'h, INT '+Math.ceil(r.allocINT)+'h (older stream first).'
+                         : '⚠️ Short by ~'+Math.ceil(r.deficitHours)+'h → add OT ~'+Math.ceil(r.deficitHours)+'h (≈ '+Math.ceil(r.deficitHours/11)+' FTE @11h).')
     ].join('\n');
   }
 
@@ -229,7 +228,8 @@
       $('ukFTE').textContent = isFinite(r.fteUK_target)? r.fteUK_target:'—';
       $('intFTE').textContent = isFinite(r.fteINT_target)? r.fteINT_target:'—';
       $('ukAge').textContent = r.ageUK||0; $('intAge').textContent = r.ageINT||0;
-      const [c1,t1]=badge(r.ageUK), [c2,t2]=badge(r.ageINT);
+      const [c1,t1]= (age=>age>=10?['b-bad','Red']:age>=5?['b-warn','Amber']:['b-good','Green'])(r.ageUK);
+      const [c2,t2]= (age=>age>=10?['b-bad','Red']:age>=5?['b-warn','Amber']:['b-good','Green'])(r.ageINT);
       $('ukBadge').innerHTML = `<span class="badge ${c1}">${t1}</span>`;
       $('intBadge').innerHTML = `<span class="badge ${c2}">${t2}</span>`;
 
@@ -259,7 +259,22 @@
     }
   }
 
-  // === Sheets logging ===
+  // === Sheets logging helpers ===
+  function normalizeAppsScriptUrl(u){
+    if(!u) return '';
+    return u.replace('/a/macros/ohpolly.com/','/macros/');
+  }
+  async function postToSheet(url,data){
+    const execUrl=normalizeAppsScriptUrl(url);
+    return fetch(execUrl,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(data),
+      credentials:'include',
+      mode:'cors'
+    });
+  }
+
   function exportCsv(){
     try{
       const key='sla_snapshots_v2';
@@ -274,7 +289,6 @@
     }catch(e){ alert('Export failed'); }
   }
   function clearCsv(){ localStorage.removeItem('sla_snapshots_v2'); logEvent('log_clear'); }
-
   function saveLocalSnapshot(snap){
     try{
       const key='sla_snapshots_v2';
@@ -287,10 +301,13 @@
     const url = $('logUrl').value.trim(); if(!url) return;
     const snap = currentSnapshot(); saveLocalSnapshot(snap);
     try{
-      await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(snap)});
+      await postToSheet(url,snap);
       if(now) $('hintMsg').textContent='Snapshot sent';
       logEvent('snapshot','sent');
-    }catch(e){ if(now) $('hintMsg').textContent='Snapshot failed'; logEvent('snapshot','failed'); }
+    }catch(e){
+      if(now) $('hintMsg').textContent='Snapshot failed';
+      logEvent('snapshot','failed');
+    }
   }
 
   let debounceTimer=null;
@@ -300,7 +317,15 @@
     debounceTimer = setTimeout(()=>sendSnapshot(false), 700);
   }
 
-  // Wire logging controls
+  // Heartbeat: logs viewer presence every 90s
+  async function sendHeartbeat(){
+    const url=$('logUrl').value.trim(); if(!url) return;
+    const who=localStorage.getItem('sla_viewer')||'(anon)';
+    const payload={timestamp:new Date().toISOString(),viewer:who,version:"v3.6",site:location.href,event:'heartbeat'};
+    try{ await postToSheet(url,payload); }catch(e){}
+  }
+
+  // Wire UI
   $('exportCsv').addEventListener('click', exportCsv);
   $('clearLog').addEventListener('click', clearCsv);
   $('sendSnap').addEventListener('click', ()=>sendSnapshot(true));
@@ -337,7 +362,7 @@
   (function init(){
     $('ukDate').value = todayISO(); $('intDate').value=todayISO();
     fillGate(); loadLog(); render();
-    setInterval(render, 1000);
+    setInterval(sendHeartbeat, 90000);
   })();
 })();
 </script>
