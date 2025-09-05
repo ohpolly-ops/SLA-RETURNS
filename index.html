@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Oh Polly — Returns SLA & Capacity</title>
+<style>
+  :root{
+    --bg:#160d12; --card:#20131b; --br:#3c2030; --text:#ffeef6; --muted:#f6c7d9;
+    --accent:#ff8cc6; --accent-2:#ff65b2; --good:#16a34a; --warn:#f59e0b; --bad:#ef4444;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px}
+  h1{margin:10px 0 4px;font-weight:800;letter-spacing:.3px;background:linear-gradient(90deg,#ffd1e6,#ff8cc6 60%,#ffd1e6);
+      -webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{color:var(--muted)}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+  .card{background:var(--card);border:1px solid var(--br);border-radius:14px;padding:14px;box-shadow:0 10px 24px rgba(255,140,198,.06)}
+  label{display:flex;justify-content:space-between;gap:10px;margin:8px 0;font-weight:700}
+  input[type=number],input[type=text],input[type=date]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--br);background:#281722;color:var(--text)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{display:grid;gap:10px;grid-template-columns:repeat(4,1fr)}
+  .tile{background:#1a1017;border:1px solid var(--br);border-radius:12px;padding:12px}
+  .num{font-size:22px;font-weight:800}
+  table{width:100%;border-collapse:collapse;margin-top:6px}
+  th,td{border-bottom:1px solid var(--br);padding:6px 8px;text-align:left}
+  .badge{font-weight:800;border-radius:999px;padding:3px 9px}
+  .b-good{background:rgba(22,163,74,.15);color:#86efac;border:1px solid rgba(22,163,74,.4)}
+  .b-warn{background:rgba(245,158,11,.12);color:#fde68a;border:1px solid rgba(245,158,11,.35)}
+  .b-bad{background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.35)}
+  button{border:1px solid transparent;background:var(--accent);color:#2b0f1d;font-weight:800;border-radius:10px;padding:9px 13px;cursor:pointer;transition:transform .05s ease, background .15s ease}
+  button:hover{background:var(--accent-2);transform:translateY(-1px)}
+  button.out{background:transparent;color:var(--text);border:1px solid var(--br)}
+  .muted{color:var(--muted)} .hint{color:var(--muted);font-size:12px}
+  #gate{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:20}
+  #gate.hide{display:none!important}
+  #gate .dlg{background:#1a1017;border:1px solid var(--br);border-radius:14px;padding:16px;max-width:360px;width:92%;box-shadow:0 10px 24px rgba(255,140,198,.1)}
+</style>
+</head>
+<body>
+<div id="gate" class="hide">
+  <div class="dlg">
+    <h3 style="margin:0 0 8px">Who’s viewing?</h3>
+    <p class="hint">Your name is logged with timestamps for the traffic log.</p>
+    <input id="viewer" type="text" placeholder="e.g., Jamie L"/>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button id="enterBtn">Enter</button>
+      <button id="enterCancel" class="out">Cancel</button>
+    </div>
+    <p id="gateWarn" class="hint" style="margin-top:8px"></p>
+  </div>
+</div>
+
+<div class="wrap">
+  <h1>Returns SLA & Capacity</h1>
+  <p class="lead">Enter: <b>UK pallets by courier</b> (Asda, Evri, InPost/Other), <b>INT pallets</b>, <b>oldest dates</b>, and <b>total person-hours available for returns</b>. We’ll tell you how many hours (and FTE @ 11h) are needed to get back to <b>Green</b> (&lt;5d). Achievable rate = <b>30 items/h</b>.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Inputs</h2>
+      <div class="row">
+        <div>
+          <label>UK — Asda pallets</label>
+          <input id="ukAsda" type="number" min="0" step="1" value="0"/>
+        </div>
+        <div>
+          <label>UK — Evri pallets</label>
+          <input id="ukEvri" type="number" min="0" step="1" value="0"/>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>UK — InPost/Other pallets</label>
+          <input id="ukOther" type="number" min="0" step="1" value="0"/>
+        </div>
+        <div>
+          <label>INT pallets</label>
+          <input id="intPallets" type="number" min="0" step="1" value="0"/>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Oldest UK date</label>
+          <input id="ukDate" type="date"/>
+        </div>
+        <div>
+          <label>Oldest INT date</label>
+          <input id="intDate" type="date"/>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Lines per parcel</label>
+          <input id="lpp" type="number" value="1.9" step="0.1" disabled/>
+          <div class="hint">Conversion: Asda = 140 parcels/pallet • Evri = 170 • InPost/Other = 140 • INT = 140</div>
+        </div>
+        <div></div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label><b>Achievable rate (items/h)</b></label>
+          <input id="rate" type="number" value="30" disabled/>
+        </div>
+        <div>
+          <label><b>Total person-hours available today</b></label>
+          <input id="availHours" type="number" min="0" step="0.1" value="0"/>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Optional OT hours (extra pool)</label>
+          <input id="extraHours" type="number" min="0" step="0.1" value="0"/>
+        </div>
+        <div></div>
+      </div>
+
+      <div style="margin-top:8px" class="hint">Tip: Sum your shift lengths (e.g., 4×11h + 3×6h + 2×9h = 83h). Put <b>83</b> above. Add any expected OT in the OT field.</div>
+    </div>
+
+    <div class="card">
+      <h2>Results</h2>
+      <div class="kpi">
+        <div class="tile"><div class="muted">Total items (UK)</div><div class="num" id="ukItems">—</div><div class="hint">from pallets</div></div>
+        <div class="tile"><div class="muted">Total items (INT)</div><div class="num" id="intItems">—</div><div class="hint">from pallets</div></div>
+        <div class="tile"><div class="muted">Hours to Green (UK)</div><div class="num" id="ukHrs">—</div><div class="hint">clear ≥5-day items</div></div>
+        <div class="tile"><div class="muted">Hours to Green (INT)</div><div class="num" id="intHrs">—</div><div class="hint">clear ≥5-day items</div></div>
+      </div>
+      <div class="kpi" style="margin-top:8px">
+        <div class="tile"><div class="muted">FTE to Green (UK)</div><div class="num" id="ukFTE">—</div><div class="hint">@ 11h</div></div>
+        <div class="tile"><div class="muted">FTE to Green (INT)</div><div class="num" id="intFTE">—</div><div class="hint">@ 11h</div></div>
+        <div class="tile"><div class="muted">Oldest Age (UK)</div><div class="num" id="ukAge">—</div><div id="ukBadge" class="hint"></div></div>
+        <div class="tile"><div class="muted">Oldest Age (INT)</div><div class="num" id="intAge">—</div><div id="intBadge" class="hint"></div></div>
+      </div>
+      <table>
+        <thead><tr><th>Summary</th><th>UK</th><th>INT</th></tr></thead>
+        <tbody id="tbl"><tr><td>—</td><td></td><td></td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Plan for Today</h2>
+      <div id="plan" class="muted">Enter pallets, dates & hours to see the plan.</div>
+    </div>
+
+    <div class="card">
+      <h2>Traffic Log</h2>
+      <table>
+        <thead><tr><th>When</th><th>User</th><th>Action</th><th>Note</th></tr></thead>
+        <tbody id="log"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id); const fmt=n=>Number.isFinite(n)?Math.round(n).toLocaleString():"—";
+  const P_ASDA=140, P_EVRI=170, P_OTHER=140, P_INTL=140; const RATE=30, FTE_H=11; const LPP=1.9;
+  const state={viewer:\"\", ukDate:\"\", intDate:\"\", ukAsda:0, ukEvri:0, ukOther:0, intPallets:0, availHours:0, extraHours:0};
+
+  function badge(age){ if(age>=10) return ['b-bad','Red']; if(age>=5) return ['b-warn','Amber']; return ['b-good','Green']; }
+  function todayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10);} 
+  function daysSince(s){ if(!s) return 0; const d=new Date(s+'T00:00:00'); const t=new Date(); d.setHours(0,0,0,0); t.setHours(0,0,0,0); return Math.max(0,Math.round((t-d)/86400000)); }
+  function fracOlder(age){ if(age<5) return 0; return Math.min(1, (age-4)/Math.max(1,age)); }
+
+  function log(action,note=\"\"){ try{ const row=[new Date().toISOString(), state.viewer||\"(anon)\", action, note]; addLogRow(row); localStorage.setItem('sla_log',(JSON.stringify((JSON.parse(localStorage.getItem('sla_log')||'[]')).concat([row]).slice(-500)))); }catch(e){} }
+  function addLogRow(r){ const tr=document.createElement('tr'); tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]||''}</td>`; $('log').appendChild(tr); }
+  function loadLog(){ try{ (JSON.parse(localStorage.getItem('sla_log')||'[]')).forEach(addLogRow);}catch(e){} }
+
+  function fillGate(){ let seen=null; try{ seen=localStorage.getItem('sla_viewer'); }catch(e){}
+    if(seen){ state.viewer=seen; $('gate').classList.add('hide'); }
+    else { $('gate').classList.remove('hide'); }
+  }
+  function closeGate(name){ state.viewer=name; try{ localStorage.setItem('sla_viewer',name);}catch(e){}
+    $('gate').classList.add('hide'); log('enter'); }
+  $('enterBtn').onclick=()=>{ const n=$('viewer').value.trim(); if(!n){ $('gateWarn').textContent='Name required'; return;} closeGate(n); };
+  $('enterCancel').onclick=()=>{ $('gateWarn').textContent='Name required to view'; };
+  $('viewer').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('enterBtn').click(); }});
+
+  // Bind inputs → state → render
+  ['ukAsda','ukEvri','ukOther','intPallets','availHours','extraHours'].forEach(id=>$(id).addEventListener('input',()=>{ state[id]= +$(id).value||0; render(); }));
+  ['ukDate','intDate'].forEach(id=>$(id).addEventListener('input',()=>{ state[id]= $(id).value; render(); }));
+
+  function compute(){
+    const ukParcels = (state.ukAsda||0)*P_ASDA + (state.ukEvri||0)*P_EVRI + (state.ukOther||0)*P_OTHER;
+    const intParcels = (state.intPallets||0)*P_INTL;
+
+    const ukItems = ukParcels * LPP;
+    const intItems= intParcels * LPP;
+
+    const ageUK  = daysSince(state.ukDate);
+    const ageINT = daysSince(state.intDate);
+
+    const riskFracUK  = fracOlder(ageUK);
+    const riskFracINT = fracOlder(ageINT);
+
+    const itemsRiskUK  = ukItems  * riskFracUK;
+    const itemsRiskINT = intItems * riskFracINT;
+
+    const hrsUK  = itemsRiskUK  / RATE;
+    const hrsINT = itemsRiskINT / RATE;
+
+    const avail = (state.availHours||0) + (state.extraHours||0);
+    const capacityItems = RATE * avail;
+
+    const needHours = hrsUK + hrsINT;
+    const deficitHours = Math.max(0, needHours - avail);
+
+    // Allocation rule: older stream first
+    const olderFirst = ageUK >= ageINT ? 'UK' : 'INT';
+    let allocUK=0, allocINT=0, rem=avail;
+    if(olderFirst==='UK'){ allocUK=Math.min(hrsUK,rem); rem-=allocUK; allocINT=Math.min(hrsINT,rem); }
+    else { allocINT=Math.min(hrsINT,rem); rem-=allocINT; allocUK=Math.min(hrsUK,rem); }
+
+    const fteUK_target  = Math.ceil(hrsUK / 11);
+    const fteINT_target = Math.ceil(hrsINT / 11);
+
+    return { ukItems,intItems,ageUK,ageINT,itemsRiskUK,itemsRiskINT,hrsUK,hrsINT,
+      avail,capacityItems,deficitHours,allocUK,allocINT,fteUK_target,fteINT_target };
+  }
+
+  function render(){
+    const r=compute();
+    $('ukItems').textContent = fmt(r.ukItems); $('intItems').textContent = fmt(r.intItems);
+    $('ukHrs').textContent = isFinite(r.hrsUK)? Math.ceil(r.hrsUK):'—';
+    $('intHrs').textContent = isFinite(r.hrsINT)? Math.ceil(r.hrsINT):'—';
+    $('ukFTE').textContent = isFinite(r.fteUK_target)? r.fteUK_target:'—';
+    $('intFTE').textContent = isFinite(r.fteINT_target)? r.fteINT_target:'—';
+    $('ukAge').textContent = r.ageUK||0; $('intAge').textContent = r.ageINT||0;
+    const [c1,t1]=badge(r.ageUK), [c2,t2]=badge(r.ageINT);
+    $('ukBadge').innerHTML = `<span class="badge ${c1}">${t1}</span>`;
+    $('intBadge').innerHTML = `<span class="badge ${c2}">${t2}</span>`;
+
+    $('tbl').innerHTML = `<tr><td>Oldest age (days)</td><td>${r.ageUK}</td><td>${r.ageINT}</td></tr>
+      <tr><td>UK pallets (Asda / Evri / Other)</td><td>${(document.getElementById('ukAsda').value||0)} / ${(document.getElementById('ukEvri').value||0)} / ${(document.getElementById('ukOther').value||0)}</td><td>${(document.getElementById('intPallets').value||0)}</td></tr>
+      <tr><td>Total items</td><td>${fmt(r.ukItems)}</td><td>${fmt(r.intItems)}</td></tr>
+      <tr><td>Items ≥5d (to clear)</td><td>${fmt(r.itemsRiskUK)}</td><td>${fmt(r.itemsRiskINT)}</td></tr>`;
+
+    const plan=[];
+    plan.push(`Available person-hours (incl. OT): <b>${Math.round(r.avail)}</b> → capacity <b>${fmt(r.capacityItems)}</b> items.`);
+    plan.push(`Work to reach <b>Green</b> today (clear ≥5-day items): UK <b>${fmt(r.itemsRiskUK)}</b> items → <b>${fmt(Math.ceil(r.hrsUK))}</b> h; INT <b>${fmt(r.itemsRiskINT)}</b> items → <b>${fmt(Math.ceil(r.hrsINT))}</b> h.`);
+    if(r.deficitHours<=0){
+      plan.push(`<b>You can reach Green without extra hours.</b> Suggested allocation today: UK <b>${fmt(Math.ceil(r.allocUK))}</b> h, INT <b>${fmt(Math.ceil(r.allocINT))}</b> h (prioritise the older stream first).`);
+    } else {
+      plan.push(`<b>Short by ${fmt(Math.ceil(r.deficitHours))} hours.</b> Options: add ~<b>${fmt(Math.ceil(r.deficitHours))}</b> OT hours total (≈ <b>${Math.ceil(r.deficitHours/11)}</b> FTE @ 11h).`);
+    }
+    plan.push(`Tactic: allocate hours to the older stream first; re-balance once it reaches ≤5d.`);
+
+    $('plan').innerHTML = plan.join('<br>');
+  }
+
+  // Init
+  (function init(){
+    document.getElementById('ukDate').value = todayISO(); document.getElementById('intDate').value=todayISO();
+    fillGate(); loadLog(); render();
+  })();
+})();
+</script>
+</body>
+</html>
