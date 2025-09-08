@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SLA Return Processing Planner (v3.6 + Unpacking)</title>
+  <style>
+    :root{
+      --pink:#ff6aa4;
+      --pink-600:#ff3f8a;
+      --pink-100:#ffe3f0;
+      --bg:#fff9fc;
+      --text:#1f1f1f;
+      --muted:#6b6b6b;
+      --card:#ffffff;
+      --good:#1fa971;
+      --warn:#f59e0b;
+      --bad:#ef4444;
+      --shadow:0 10px 24px rgba(255,106,164,.18);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background:linear-gradient(180deg,var(--bg),#ffffff);
+      color:var(--text);
+      margin:0;
+      padding:24px;
+    }
+    .app{
+      max-width:1200px;
+      margin:0 auto;
+    }
+    header{
+      display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px;
+    }
+    .brand{
+      display:flex;align-items:center;gap:12px;
+    }
+    .logo{
+      width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--pink),var(--pink-600));
+      box-shadow:var(--shadow);
+      display:grid;place-items:center;color:white;font-weight:800;
+    }
+    h1{font-size: clamp(20px, 3.5vw, 28px); margin:0;}
+    .hello{color:var(--muted);font-size:14px}
+    .grid{
+      display:grid;gap:16px;
+      grid-template-columns: 1.1fr 1fr;
+    }
+    .card{
+      background:var(--card);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:18px;
+    }
+    .card h2{
+      font-size:18px;margin:0 0 12px 0;color:#111;
+    }
+    .sub{color:var(--muted);font-size:12px;margin-top:-6px;margin-bottom:12px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    label{font-size:13px;color:#333;font-weight:600;margin-bottom:6px;display:block}
+    input, select, button, textarea{
+      width:100%;padding:12px 12px;border-radius:12px;border:1px solid #eee;background:#fff;font-size:14px;
+    }
+    input:focus, select:focus, textarea:focus{outline:2px solid var(--pink-100);border-color:var(--pink)}
+    .pill{
+      display:inline-flex;gap:8px;align-items:center;background:var(--pink-100);color:#a20e4d;
+      padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;margin-right:8px
+    }
+    .btn{
+      background:linear-gradient(135deg,var(--pink),var(--pink-600));color:#fff;border:none;font-weight:700;
+      cursor:pointer;box-shadow:var(--shadow);
+    }
+    .btn:active{transform: translateY(1px)}
+    .muted{color:var(--muted);font-size:12px}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:8px}
+    .kpi{background:var(--bg);border:1px dashed #ffd0e4;border-radius:16px;padding:14px}
+    .kpi h3{margin:0;font-size:12px;color:#a20e4d;text-transform:uppercase;letter-spacing:.4px}
+    .kpi p{margin:6px 0 0 0;font-size:20px;font-weight:800}
+    .kpi.small p{font-size:16px}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    .table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px}
+    .table th,.table td{padding:10px;border-bottom:1px solid #f5d5e5;text-align:left}
+    .badge{font-size:11px;border-radius:999px;padding:4px 8px;display:inline-block}
+    .ok{background:#eaf8f1;color:#0d7e53}
+    .warn{background:#fff6e6;color:#9a6500}
+    .bad{background:#ffeaea;color:#b12222}
+    .stack{display:flex;flex-direction:column;gap:6px}
+    .footer-note{font-size:11px;color:var(--muted);margin-top:6px}
+    .copy{display:flex;gap:10px;align-items:center}
+    .right .card{height:100%}
+    .radio-row{display:flex;gap:8px;align-items:center;margin:8px 0}
+    .section-title{font-weight:800;margin-top:8px}
+    .divider{height:1px;background:#ffe0ee;margin:12px 0}
+    @media (max-width: 980px){
+      .grid{grid-template-columns:1fr}
+      .kpis{grid-template-columns:repeat(2,1fr)}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="logo">RP</div>
+        <div>
+          <h1>SLA Return Processing Planner</h1>
+          <div class="hello" id="hello">Hi! 👋</div>
+        </div>
+      </div>
+      <div>
+        <span class="pill" id="who"></span>
+        <span class="pill" id="now"></span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="left">
+        <div class="card">
+          <h2>Inputs</h2>
+          <p class="sub">Keep your Friday v3.6 flow — just with unpacking layered in. Pink, neat, and pipeline-aware 💗</p>
+
+          <div class="section-title">SLA</div>
+          <div class="radio-row">
+            <label><input type="radio" name="slamode" value="hours" checked/> Complete within (hours)</label>
+            <label><input type="radio" name="slamode" value="deadline"/> Deadline (date & time)</label>
+          </div>
+          <div class="row" id="sla-hours-row">
+            <div>
+              <label>Target: clear within (hours)</label>
+              <input type="number" id="sla_hours" value="24" min="0" step="0.5"/>
+            </div>
+            <div>
+              <label>Slack handover channel</label>
+              <input type="text" id="handover_channel" placeholder="#returns-handover"/>
+            </div>
+          </div>
+          <div class="row" id="sla-deadline-row" style="display:none">
+            <div>
+              <label>Deadline date & time</label>
+              <input type="datetime-local" id="deadline_dt"/>
+            </div>
+            <div>
+              <label>Slack handover channel</label>
+              <input type="text" id="handover_channel_deadline" placeholder="#returns-handover"/>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="section-title">Volumes</div>
+          <div class="row">
+            <div>
+              <label>Number of pallets</label>
+              <input type="number" id="pallets" value="10" min="0"/>
+            </div>
+            <div>
+              <label>Avg parcels per pallet</label>
+              <input type="number" id="parcels_per_pallet" value="80" min="0"/>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Parcels already unpacked</label>
+              <input type="number" id="unpacked_parcels" value="0" min="0"/>
+            </div>
+            <div>
+              <label>Avg items per parcel</label>
+              <input type="number" id="items_per_parcel" value="1.9" step="0.1" min="0"/>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="section-title">Productivity assumptions</div>
+          <div class="row">
+            <div>
+              <label>Unpacking rate (parcels/hour per associate)</label>
+              <input type="number" id="unpack_rate" value="70" min="1"/>
+            </div>
+            <div>
+              <label>Returns processing rate (items/hour per associate)</label>
+              <input type="number" id="process_rate" value="30" min="1"/>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="section-title">Shifts & availability</div>
+          <div class="three">
+            <div class="stack">
+              <label>12h shift (net 11h) — associates available</label>
+              <input type="number" id="shift12_people" value="0" min="0"/>
+              <label>12h — number of shifts within SLA</label>
+              <input type="number" id="shift12_count" value="1" min="0"/>
+            </div>
+            <div class="stack">
+              <label>9h shift (net 8.5h) — associates available</label>
+              <input type="number" id="shift9_people" value="0" min="0"/>
+              <label>9h — number of shifts within SLA</label>
+              <input type="number" id="shift9_count" value="1" min="0"/>
+            </div>
+            <div class="stack">
+              <label>6h shift (net 5.5h) — associates available</label>
+              <input type="number" id="shift6_people" value="0" min="0"/>
+              <label>6h — number of shifts within SLA</label>
+              <input type="number" id="shift6_count" value="1" min="0"/>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="two">
+            <button class="btn" id="calc">Calculate suggestions</button>
+            <button id="reset">Reset</button>
+          </div>
+          <div class="footer-note">Tip: adjust rates & parcels-per-pallet to match reality. The plan updates instantly.</div>
+        </div>
+
+        <div class="kpis" id="kpis">
+          <div class="kpi"><h3>Total parcels</h3><p id="kpi_total_parcels">—</p></div>
+          <div class="kpi"><h3>Parcels to unpack</h3><p id="kpi_to_unpack">—</p></div>
+          <div class="kpi"><h3>Total items</h3><p id="kpi_total_items">—</p></div>
+          <div class="kpi"><h3>SLA Horizon (hrs)</h3><p id="kpi_horizon">—</p></div>
+        </div>
+
+        <div class="card">
+          <h2>Headcount suggestions</h2>
+          <div class="sub">We compute associate-hours for unpacking & processing, then translate to shift-based headcount.</div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Workstream</th>
+                <th>Req. assoc-hrs</th>
+                <th>Within SLA</th>
+                <th>Suggested headcount mix (12h / 9h / 6h)</th>
+              </tr>
+            </thead>
+            <tbody id="suggestion_rows">
+              <tr><td colspan="4" class="muted">No data yet. Hit "Calculate suggestions".</td></tr>
+            </tbody>
+          </table>
+          <div class="footer-note">Logic: greedy fill 12h → 9h → 6h to cover associate-hours. Clamped by your availability. Shows shortfall if any.</div>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="card">
+          <h2>Capacity vs Requirement</h2>
+          <div class="sub">Check if your available shifts can cover the workload within the SLA window.</div>
+
+          <div class="two">
+            <div class="kpi small">
+              <h3>Total required assoc-hrs (unpack + process)</h3>
+              <p id="kpi_total_req">—</p>
+            </div>
+            <div class="kpi small">
+              <h3>Total available assoc-hrs (entered)</h3>
+              <p id="kpi_total_cap">—</p>
+            </div>
+          </div>
+
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Shift type</th>
+                <th>Net hours</th>
+                <th>People</th>
+                <th>Shift count</th>
+                <th>Assoc-hrs capacity</th>
+              </tr>
+            </thead>
+            <tbody id="capacity_rows"></tbody>
+          </table>
+          <div id="capacity_status" class="footer-note"></div>
+        </div>
+
+        <div class="card">
+          <h2>Slack handover</h2>
+          <div class="sub">Auto-generate a clean, friendly handover message with your numbers.</div>
+          <textarea id="handover" rows="12" placeholder="Your handover will appear here…"></textarea>
+          <div class="copy">
+            <button class="btn" id="copy">Copy to clipboard</button>
+            <span class="muted" id="copy_status"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Name pop-up (persist to localStorage)
+    const helloEl = document.getElementById('hello');
+    const whoEl = document.getElementById('who');
+    const nowEl = document.getElementById('now');
+    function fmtNow(){
+      const d = new Date();
+      return d.toLocaleString(undefined,{weekday:'short', year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    }
+    function initName(){
+      let who = localStorage.getItem('rp_who');
+      if(!who){
+        who = prompt('Your name for the handover?');
+        if(!who){ who = 'Returns Lead'; }
+        localStorage.setItem('rp_who', who);
+      }
+      whoEl.textContent = '👤 ' + who;
+      helloEl.textContent = `Hi ${who}! 👋 Ready to plan today?`;
+      nowEl.textContent = '🕒 ' + fmtNow();
+      setInterval(()=> nowEl.textContent = '🕒 ' + fmtNow(), 60_000);
+    }
+    initName();
+
+    // SLA mode toggling
+    const slaHoursRow = document.getElementById('sla-hours-row');
+    const slaDeadlineRow = document.getElementById('sla-deadline-row');
+    document.querySelectorAll('input[name="slamode"]').forEach(r=>{
+      r.addEventListener('change', () => {
+        if(r.checked && r.value==='hours'){
+          slaHoursRow.style.display='grid'; slaDeadlineRow.style.display='none';
+        }else if(r.checked && r.value==='deadline'){
+          slaHoursRow.style.display='none'; slaDeadlineRow.style.display='grid';
+        }
+        recalc();
+      })
+    });
+
+    // Elements
+    const el = id => document.getElementById(id);
+    const inputs = [
+      'sla_hours','deadline_dt','pallets','parcels_per_pallet','unpacked_parcels','items_per_parcel',
+      'unpack_rate','process_rate',
+      'shift12_people','shift12_count','shift9_people','shift9_count','shift6_people','shift6_count',
+      'handover_channel','handover_channel_deadline'
+    ];
+
+    inputs.forEach(id => el(id).addEventListener('input', recalc));
+    el('calc').addEventListener('click', recalc);
+    el('reset').addEventListener('click', ()=> { localStorage.removeItem('rp_who'); location.reload();});
+
+    function horizonHours(){
+      const mode = document.querySelector('input[name="slamode"]:checked').value;
+      if(mode==='hours'){
+        const h = parseFloat(el('sla_hours').value||'0');
+        return Math.max(0,h);
+      }else{
+        const dt = new Date(el('deadline_dt').value);
+        if(isNaN(dt.getTime())) return 0;
+        const now = new Date();
+        return Math.max(0,(dt - now) / 3_600_000);
+      }
+    }
+
+    function format(n, digits=0){
+      if(!isFinite(n)) return '—';
+      return Number(n).toLocaleString(undefined,{maximumFractionDigits:digits, minimumFractionDigits:digits});
+    }
+
+    function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+    function recalc(){
+      // Inputs
+      const pallets = +el('pallets').value || 0;
+      const parcelsPerPallet = +el('parcels_per_pallet').value || 0;
+      const unpackedParcels = +el('unpacked_parcels').value || 0;
+      const itemsPerParcel = +el('items_per_parcel').value || 0;
+      const unpackRate = +el('unpack_rate').value || 1;
+      const processRate = +el('process_rate').value || 1;
+
+      const shift12_people = +el('shift12_people').value || 0;
+      const shift12_count  = +el('shift12_count').value || 0;
+      const shift9_people  = +el('shift9_people').value || 0;
+      const shift9_count   = +el('shift9_count').value || 0;
+      const shift6_people  = +el('shift6_people').value || 0;
+      const shift6_count   = +el('shift6_count').value || 0;
+
+      // Constants (net hours)
+      const H12 = 11, H9 = 8.5, H6 = 5.5;
+
+      // Volumes
+      const totalParcels = pallets * parcelsPerPallet;
+      const toUnpack = Math.max(0, totalParcels - unpackedParcels);
+      const totalItems = totalParcels * itemsPerParcel;
+
+      const horizon = horizonHours();
+
+      // Requirements (associate-hours)
+      const reqUnpack = toUnpack / unpackRate;      // assoc-hrs
+      const reqProcess = totalItems / processRate;  // assoc-hrs
+      const reqTotal = reqUnpack + reqProcess;
+
+      // Available capacity (assoc-hrs) per shift type within SLA window (bounded by counts entered)
+      const cap12 = shift12_people * shift12_count * H12;
+      const cap9  = shift9_people  * shift9_count  * H9;
+      const cap6  = shift6_people  * shift6_count  * H6;
+      const capTotal = cap12 + cap9 + cap6;
+
+      // KPI updates
+      el('kpi_total_parcels').textContent = format(totalParcels);
+      el('kpi_to_unpack').textContent = format(toUnpack);
+      el('kpi_total_items').textContent = format(totalItems);
+      el('kpi_horizon').textContent = format(horizon,1);
+      el('kpi_total_req').textContent = format(reqTotal,1);
+      el('kpi_total_cap').textContent = format(capTotal,1);
+
+      // Capacity table
+      const capRows = [
+        ['12h (net 11h)', H12, shift12_people, shift12_count, cap12],
+        ['9h (net 8.5h)', H9,  shift9_people, shift9_count,  cap9],
+        ['6h (net 5.5h)', H6,  shift6_people, shift6_count,  cap6],
+      ].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${format(r[4],1)}</td></tr>`).join('');
+      el('capacity_rows').innerHTML = capRows;
+
+      const status = capTotal >= reqTotal ?
+        `<span class="badge ok">Capacity OK</span> You have enough associate-hours to cover the workload.` :
+        `<span class="badge bad">Shortfall</span> You are short by <b>${format(reqTotal - capTotal,1)}</b> assoc-hrs. Increase headcount or shift counts, or extend SLA.`;
+      el('capacity_status').innerHTML = status;
+
+      // Suggestions: translate required assoc-hrs into shift-based headcount (greedy fill 12h→9h→6h)
+      function suggest(req, label){
+        let remaining = req;
+        let s12 = 0, s9 = 0, s6 = 0;
+        // Max assoc-hrs per single associate over all counted shifts
+        const per12 = H12 * shift12_count;
+        const per9  = H9  * shift9_count;
+        const per6  = H6  * shift6_count;
+
+        // Fill 12h
+        if(per12>0 && remaining>0){
+          const need12 = Math.ceil(remaining / per12);
+          s12 = clamp(need12, 0, shift12_people);
+          remaining -= s12 * per12;
+        }
+        // Fill 9h
+        if(per9>0 && remaining>0){
+          const need9 = Math.ceil(remaining / per9);
+          s9 = clamp(need9, 0, shift9_people);
+          remaining -= s9 * per9;
+        }
+        // Fill 6h
+        if(per6>0 && remaining>0){
+          const need6 = Math.ceil(remaining / per6);
+          s6 = clamp(need6, 0, shift6_people);
+          remaining -= s6 * per6;
+        }
+        const within = remaining<=0;
+        return {label, req, s12, s9, s6, within, shortfall: Math.max(0, remaining)};
+      }
+
+      const sUnpack = suggest(reqUnpack, 'Unpacking');
+      const sProc   = suggest(reqProcess, 'Returns processing');
+
+      const rows = [sUnpack, sProc].map(s=>{
+        const chip = s.within ? `<span class="badge ok">OK</span>` :
+                                `<span class="badge bad">Short by ${format(s.shortfall,1)} assoc-hrs</span>`;
+        return `<tr>
+          <td>${s.label}</td>
+          <td>${format(s.req,1)}</td>
+          <td>${chip}</td>
+          <td>${s.s12} / ${s.s9} / ${s.s6}</td>
+        </tr>`;
+      }).join('');
+      el('suggestion_rows').innerHTML = rows;
+
+      // Handover
+      const who = localStorage.getItem('rp_who') || 'Returns Lead';
+      const channel = document.querySelector('input[name="slamode"]:checked').value==='hours' ?
+                      (el('handover_channel').value || '#returns-handover') :
+                      (el('handover_channel_deadline').value || '#returns-handover');
+
+      const deadlineTxt = (function(){
+        const mode = document.querySelector('input[name="slamode"]:checked').value;
+        if(mode==='hours'){
+          return `Target: clear within ${format(+el('sla_hours').value||0,1)} hours.`;
+        }else{
+          const dt = new Date(el('deadline_dt').value);
+          if(isNaN(dt)) return `Target: deadline not set.`;
+          return `Target deadline: ${dt.toLocaleString()}. (~${format(horizon,1)} hrs)`;
+        }
+      })();
+
+      const handover = `*${who} — Returns & Unpacking Handover*\n#channel: ${channel}\n\n` +
+      `• ${deadlineTxt}\n` +
+      `• Volumes: ${format(pallets)} pallets × ${format(parcelsPerPallet)} parcels/pallet = ${format(totalParcels)} parcels ` +
+      `(already unpacked: ${format(unpackedParcels)}). Items estimate: ${format(itemsPerParcel,1)}/parcel → ${format(totalItems)} items.\n` +
+      `• Rates: Unpacking ${format(unpackRate)}/hr/assoc | Processing ${format(processRate)}/hr/assoc.\n\n` +
+      `• Required assoc-hrs → Unpacking: ${format(reqUnpack,1)} | Processing: ${format(reqProcess,1)} | Total: ${format(reqTotal,1)}.\n` +
+      `• Available assoc-hrs → 12h: ${format(cap12,1)} | 9h: ${format(cap9,1)} | 6h: ${format(cap6,1)} | Total: ${format(capTotal,1)}.\n` +
+      `• Suggestions (12h/9h/6h): Unpack ${sUnpack.s12}/${sUnpack.s9}/${sUnpack.s6} | Process ${sProc.s12}/${sProc.s9}/${sProc.s6}.\n` +
+      `${capTotal>=reqTotal ? '✅ Capacity OK within SLA.' : '⚠️ Shortfall — increase headcount or extend SLA.'}\n` +
+      `\nNotes:\n- Greedy allocation 12h→9h→6h. Adjust inputs to fine-tune.\n- Items-per-parcel is an estimate (change if needed).`;
+      el('handover').value = handover;
+    }
+
+    // Copy
+    el('copy').addEventListener('click', async()=>{
+      try{
+        await navigator.clipboard.writeText(el('handover').value);
+        el('copy_status').textContent = 'Copied!';
+        setTimeout(()=> el('copy_status').textContent='', 2000);
+      }catch(e){
+        el('copy_status').textContent = 'Copy failed';
+      }
+    });
+
+    // Initial calc
+    recalc();
+  </script>
+</body>
+</html>
