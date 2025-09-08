@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Returns SLA v3.6 + Unpacking — Oh Polly</title>
+<title>Returns SLA v3.6 — with Unpacking Suggestions</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -57,36 +57,50 @@ code{background:#fff;border:1px solid #F0CFD9;border-radius:6px;padding:0 4px}
   </div>
 
   <div class="container">
-    <!-- Unpacking panel (NEW) -->
+    <!-- UNPACKING: Pallets + Unpacked + SLA deadline -->
     <div class="panel">
       <div class="kpis">
-        <div class="kpi"><div class="label">Total Returns (rows)</div><div class="value" id="k_total">0</div></div>
-        <div class="kpi"><div class="label">Unpacking Required Hours</div><div class="value" id="k_req">0</div></div>
-        <div class="kpi"><div class="label">Capacity Parcels (from shifts)</div><div class="value" id="k_capParcels">0</div></div>
-        <div class="kpi"><div class="label">Status</div><div class="value" id="k_status">—</div></div>
+        <div class="kpi"><div class="label">Total In (from pallets)</div><div class="value" id="k_total_parcels">0</div></div>
+        <div class="kpi"><div class="label">Unpacked so far</div><div class="value" id="k_done">0</div></div>
+        <div class="kpi"><div class="label">Remaining parcels</div><div class="value" id="k_rem">0</div></div>
+        <div class="kpi"><div class="label">Required person-hours</div><div class="value" id="k_req">0</div></div>
       </div>
       <div class="controls" style="margin-top:8px">
-        <label>PPH (Parcels per person per hour)
+        <label>Pallets
+          <input type="number" id="pallets" value="0" min="0" step="1">
+        </label>
+        <label>Parcels per pallet
+          <input type="number" id="ppp" value="100" min="1" step="1">
+        </label>
+        <label>Unpacked parcels so far
+          <input type="number" id="unpacked" value="0" min="0" step="1">
+        </label>
+        <label>PPH (achievable)
           <input type="number" id="pph" value="70" min="1" step="1">
         </label>
-        <label>6h staff (eff. 5h40m)
-          <input type="number" id="n6" value="0" min="0" step="1">
+        <label>SLA deadline
+          <input type="datetime-local" id="deadline" value="2025-09-10T13:01">
         </label>
-        <label>9h staff (eff. 8h15m)
-          <input type="number" id="n9" value="0" min="0" step="1">
-        </label>
-        <label>11h staff (eff. 11h)
-          <input type="number" id="n11" value="0" min="0" step="1">
-        </label>
-        <div class="row">
-          <button id="suggestBtn">Suggest mix</button>
-          <button id="applySuggestBtn">Apply suggestion</button>
-          <span id="suggestText" class="help"></span>
-        </div>
       </div>
-      <div class="help" style="margin-top:8px">
-        Assumes <b>70</b> parcels/person/hour by default. Effective hours with breaks: <b>6h → 5h40m</b>, <b>9h → 8h15m</b>, <b>11h → 11h</b>.
-        Required hours = <code>Total returns ÷ PPH</code>. Capacity parcels = <code>(6h×5.667 + 9h×8.25 + 11h×11) × PPH</code>.
+      <div class="panel" style="margin-top:12px">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:16px">
+          <div style="flex:1">
+            <div class="help"><b>Shifts:</b> 6h (5h40m effective), 9h (8h15m), 11h (11h).</div>
+            <div class="help">To meet the SLA, each associate contributes up to <code>min(shift hours, hours to deadline)</code>.</div>
+          </div>
+          <div>
+            <button id="calcBtn">Recalculate suggestions</button>
+          </div>
+        </div>
+        <hr class="sep">
+        <div class="grid" style="grid-template-columns:repeat(3,1fr) ; gap:12px">
+          <div class="kpi"><div class="label">Hours to SLA</div><div class="value" id="k_hleft">0</div></div>
+          <div class="kpi"><div class="label">If all 11h</div><div class="value" id="k_all11">0 people</div></div>
+          <div class="kpi"><div class="label">If all 9h</div><div class="value" id="k_all9">0 people</div></div>
+          <div class="kpi"><div class="label">If all 6h</div><div class="value" id="k_all6">0 people</div></div>
+          <div class="kpi"><div class="label">Greedy suggestion</div><div class="value" id="k_suggest">—</div></div>
+          <div class="kpi"><div class="label">Finish ETA (with suggestion)</div><div class="value" id="k_eta">—</div></div>
+        </div>
       </div>
     </div>
 
@@ -163,10 +177,10 @@ code{background:#fff;border:1px solid #F0CFD9;border-radius:6px;padding:0 4px}
       <summary>How this works</summary>
       <div class="help">
         <ul>
-          <li><b>Name popup:</b> we save your name locally and greet you. Use “Change name” to update.</li>
-          <li><b>Unpacking:</b> PPH default is 70. Required hours = <code>returns ÷ PPH</code>. Capacity comes from 6h / 9h / 11h staff counts (effective hours 5.667 / 8.25 / 11).</li>
-          <li><b>SLA:</b> Age (h) since Received at. Time Left = SLA − Age. Status colours by time left.</li>
-          <li><b>Data:</b> Everything saves in your browser (localStorage). Use CSV/JSON to back up or move data.</li>
+          <li><b>Name popup:</b> we save your name locally. Double‑click the greeting to change it.</li>
+          <li><b>Unpacking:</b> Enter <i>pallets</i> and <i>parcels per pallet</i>, and <i>unpacked so far</i>. We use <b>PPH=70</b> by default. Suggestions aim to meet the chosen <b>SLA deadline</b>.</li>
+          <li><b>SLA table:</b> Age (h) since Received at. Time Left = SLA − Age. Status colours by time left.</li>
+          <li><b>Data:</b> All saved locally (browser). Use CSV/JSON to back up or restore.</li>
         </ul>
       </div>
     </details>
@@ -197,46 +211,64 @@ function showName(){ const n=getName(); document.getElementById('hello').textCon
     const v = (document.getElementById('nameInput').value||'').trim();
     if(!v) return; setName(v); showName(); document.getElementById('nameModal').style.display='none';
   };
-  // Double-click greeting to change name
   document.getElementById('hello').ondblclick = () => { document.getElementById('nameInput').value=getName(); document.getElementById('nameModal').style.display='flex'; };
 })();
 
-/* ---------- Unpacking (driven by returns count) ---------- */
-const pphEl = document.getElementById('pph');
-const n6El = document.getElementById('n6'), n9El = document.getElementById('n9'), n11El = document.getElementById('n11');
-
+/* ---------- Unpacking suggestions ---------- */
+function hoursLeft(){
+  const d = document.getElementById('deadline').value;
+  if(!d) return 0;
+  const now = new Date();
+  const target = new Date(d);
+  return Math.max(0, (target-now)/36e5);
+}
 function eff6(){ return 5 + 40/60; }   // 5.6667
 function eff9(){ return 8 + 15/60; }   // 8.25
 function eff11(){ return 11.0; }       // 11
 
-function unpackingTotals(){
-  const total = returns.length;                        // one parcel per return
-  const rate = Number(pphEl.value) || 70;
-  const reqH = total / rate;                           // person-hours required
-  const capPH = eff6()*(+n6El.value||0) + eff9()*(+n9El.value||0) + eff11()*(+n11El.value||0);
-  const capParcels = capPH * rate;
-  return { total, rate, reqH, capPH, capParcels };
+function recalc(){
+  const pallets = +document.getElementById('pallets').value||0;
+  const ppp = +document.getElementById('ppp').value||0;
+  const unpacked = +document.getElementById('unpacked').value||0;
+  const pph = +document.getElementById('pph').value||70;
+  const total = Math.max(0, pallets*ppp);
+  const remaining = Math.max(0, total - (unpacked||0));
+  const reqH = remaining / (pph||1);
+  const hLeft = hoursLeft();
+  // per-person contribution limited by hours to SLA
+  const c11 = Math.min(eff11(), hLeft);
+  const c9  = Math.min(eff9(),  hLeft);
+  const c6  = Math.min(eff6(),  hLeft);
+  const all11 = c11>0 ? Math.ceil(reqH / c11) : '∞';
+  const all9  = c9>0  ? Math.ceil(reqH / c9)  : '∞';
+  const all6  = c6>0  ? Math.ceil(reqH / c6)  : '∞';
+  // greedy suggestion
+  let rem = reqH;
+  let s11 = c11>0 ? Math.floor(rem / c11) : 0; rem -= s11*c11;
+  let s9  = c9>0  ? Math.floor(rem / c9)  : 0; rem -= s9*c9;
+  let s6  = c6>0  ? Math.ceil(rem / c6)   : (rem>0? '∞': 0);
+  if(typeof s6==='number' && s6<0) s6=0;
+  // ETA if we use suggestion: time = reqH / (s11 + s9 + s6) if workers > 0
+  let etaTxt = '—';
+  let workerCount = 0;
+  if(Number.isFinite(s11)) workerCount += s11;
+  if(Number.isFinite(s9))  workerCount += s9;
+  if(Number.isFinite(s6))  workerCount += s6;
+  if(workerCount>0){ const hrs = reqH / workerCount; etaTxt = hrs.toFixed(1) + ' h'; }
+  // write KPIs
+  document.getElementById('k_total_parcels').textContent = total.toLocaleString();
+  document.getElementById('k_done').textContent = unpacked.toLocaleString();
+  document.getElementById('k_rem').textContent = remaining.toLocaleString();
+  document.getElementById('k_req').textContent = reqH.toFixed(1);
+  document.getElementById('k_hleft').textContent = hLeft.toFixed(1);
+  document.getElementById('k_all11').textContent = all11 + ' people';
+  document.getElementById('k_all9').textContent  = all9  + ' people';
+  document.getElementById('k_all6').textContent  = all6  + ' people';
+  document.getElementById('k_suggest').textContent = `Suggest: ${s11} ×11h, ${s9} ×9h, ${s6} ×6h`;
+  document.getElementById('k_eta').textContent = etaTxt;
 }
-function updateUnpackingKpis(){
-  const t = unpackingTotals();
-  document.getElementById('k_total').textContent = t.total.toLocaleString();
-  document.getElementById('k_req').textContent = t.reqH.toFixed(1);
-  document.getElementById('k_capParcels').textContent = Math.round(t.capParcels).toLocaleString();
-  const k = document.getElementById('k_status');
-  if(t.capParcels >= t.total){ k.textContent = 'Capacity OK'; }
-  else { k.textContent = 'Need +' + Math.ceil(t.total - t.capParcels).toLocaleString() + ' parcels capacity'; }
-}
-function suggestMix(){
-  const t = unpackingTotals();
-  let rem = t.reqH;
-  let s11 = Math.floor(rem / eff11()); rem -= s11*eff11();
-  let s9  = Math.floor(rem / eff9());  rem -= s9*eff9();
-  let s6  = Math.ceil(rem / eff6());   if(s6<0) s6=0;
-  return { s11, s9, s6, text: `Suggested: ${s11} ×11h, ${s9} ×9h, ${s6} ×6h` };
-}
-document.getElementById('suggestBtn').onclick = () => { document.getElementById('suggestText').textContent = suggestMix().text; };
-document.getElementById('applySuggestBtn').onclick = () => { const s = suggestMix(); n11El.value=s.s11; n9El.value=s.s9; n6El.value=s.s6; updateUnpackingKpis(); };
-pphEl.oninput = n6El.oninput = n9El.oninput = n11El.oninput = updateUnpackingKpis;
+['pallets','ppp','unpacked','pph','deadline'].forEach(id => document.getElementById(id).addEventListener('input', recalc));
+document.getElementById('calcBtn').onclick = recalc;
 
 /* ---------- Returns SLA (local) ---------- */
 const STORE_KEY_RET = "returns_v36";
@@ -286,10 +318,9 @@ function renderReturns(){
         <button data-act="del">Delete</button>
       </td>`;
     tr.querySelector('[data-act="edit"]').onclick = () => loadIntoForm(r);
-    tr.querySelector('[data-act="del"]').onclick = () => { if(confirm('Delete this return?')){ returns = returns.filter(x => x!==r); saveReturns(); renderReturns(); updateUnpackingKpis(); addLog('Deleted '+(r.id||'')); } };
+    tr.querySelector('[data-act="del"]').onclick = () => { if(confirm('Delete this return?')){ returns = returns.filter(x => x!==r); saveReturns(); renderReturns(); addLog('Deleted '+(r.id||'')); } };
     rtbody.appendChild(tr);
   }
-  updateUnpackingKpis(); // keep unpacking synced with row count
 }
 
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m] )); }
@@ -367,11 +398,13 @@ document.getElementById('loadJson').addEventListener('change', async (e)=>{
 });
 
 searchBox.oninput = stageFilter.onchange = () => renderReturns();
-// Timer to refresh age/timeleft
 setInterval(renderReturns, 30*1000);
 
 // init
-(function init(){ renderReturns(); })();
+(function init(){
+  renderReturns();
+  recalc();
+})();
 </script>
 </body>
 </html>
