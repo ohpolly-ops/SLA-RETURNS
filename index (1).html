@@ -1,0 +1,458 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Ops Toolkit v3.7 — Unpacking Planner + Returns SLA (Local)</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --page:#FFE6EB; --panel:#FFF6F8; --ink:#2D2A2E; --muted:#6B5E68;
+  --accent:#E79AB0; --border:#F5C2CC; --good:#5CBF9B; --warn:#E6B566; --bad:#EB6F92;
+  --chip:#F9E4EB;
+}
+*{box-sizing:border-box} html,body{height:100%}
+body{margin:0;background:var(--page);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+.header{position:sticky;top:0;background:linear-gradient(180deg,#FEE9F0,var(--page));border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;padding:14px 16px;z-index:3}
+.logo{height:28px}
+.pill{border:1px solid var(--border);border-radius:999px;padding:2px 10px;color:var(--muted);font-size:12px}
+.title{font-weight:800;letter-spacing:.25px}
+.container{max-width:1280px;margin:18px auto;padding:0 16px}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.tab-btn{background:transparent;border:1px solid var(--border);border-bottom-width:2px;padding:10px 14px;border-radius:10px;cursor:pointer}
+.tab-btn.active{background:white;border-color:#E49EB6}
+.grid{display:grid;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px}
+.kpi .label{font-size:12px;color:var(--muted)} .kpi .value{font-size:22px;font-weight:800;margin-top:2px}
+.controls{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:end}
+.controls label{display:grid;gap:6px;font-size:13px;color:var(--muted)} .controls input,.controls select,.controls button{height:40px;border-radius:10px;border:1px solid var(--border);background:#fff;padding:8px 10px;font:inherit;color:var(--ink)}
+.controls button{background:#fff;border-color:#E7B3C2;cursor:pointer} .controls button:hover{border-color:var(--accent)}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:14px;background:#fff}
+table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px solid #F3D9E0;text-align:left} th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;background:#FFF0F3;position:sticky;top:0}
+input.small{width:100%;height:36px;border:1px solid #F0CFD9;border-radius:8px;padding:6px 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.badge{background:var(--chip);border:1px solid var(--border);padding:2px 8px;border-radius:999px;color:var(--muted);font-size:12px}
+.status-pill{display:inline-flex;gap:6px;align-items:center;padding:2px 10px;border-radius:999px;border:1px solid var(--border);font-weight:600}
+.st-green{background:#ECF8F3;color:#1F6B53} .st-amber{background:#FFF7E1;color:#6B5200} .st-red{background:#FFE8EE;color:#8A1636}
+.actions button{border:1px solid var(--border);background:#fff;border-radius:10px;height:34px;padding:0 10px}
+.flex{display:flex;gap:12px}
+.right{min-width:320px;max-width:420px}
+.help{font-size:13px;color:var(--muted)} details summary{cursor:pointer;font-weight:600}
+@media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,1fr)} .controls{grid-template-columns:repeat(2,1fr)} .flex{flex-direction:column} .right{max-width:none} }
+code{background:#fff;border:1px solid #F0CFD9;border-radius:6px;padding:0 4px}
+</style>
+</head>
+<body>
+  <div class="header">
+    <img class="logo" alt="Oh Polly" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='28'><text x='0' y='20' font-family='Georgia, serif' font-size='18' fill='%232D2A2E'>oh polly · ops</text></svg>">
+    <div class="title">Ops Toolkit</div>
+    <span class="pill">v3.7</span>
+    <div style="flex:1"></div>
+    <span class="pill">Local-only</span>
+    <span class="pill">CSV / JSON</span>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="planner">Unpacking Planner</button>
+      <button class="tab-btn" data-tab="returns">Returns SLA</button>
+      <span class="badge">No charts — focused on actions & capacity</span>
+    </div>
+
+    <!-- Unpacking Planner -->
+    <section id="planner" class="grid">
+      <div class="panel">
+        <div class="kpis">
+          <div class="kpi"><div class="label">Total Parcels Today</div><div class="value" id="k_total">0</div></div>
+          <div class="kpi"><div class="label">Required Person-Hours</div><div class="value" id="k_req">0</div></div>
+          <div class="kpi"><div class="label">Capacity Parcels (from sliders)</div><div class="value" id="k_capParcels">0</div></div>
+          <div class="kpi"><div class="label">Status</div><div class="value" id="k_status">—</div></div>
+        </div>
+        <div class="help" style="margin-top:8px">
+          Productivity default is <b>70 parcels per person per hour</b> (PPH). Effective hours with breaks: <b>6h → 5h 40m</b>, <b>9h → 8h 15m</b>, <b>12h → 11h</b>.
+          <br/>Formulas: Required person‑hours = <code>Sum of parcels ÷ PPH</code>. Capacity parcels = <code>(6h×5.667 + 9h×8.25 + 12h×11) × PPH</code>.
+          Status is <b>Capacity OK</b> if capacity ≥ demand; otherwise we show parcels short.
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="controls">
+          <label>PPH (Parcels per person per hour)
+            <input type="number" id="pph" value="70" min="1" step="1">
+          </label>
+          <label>6h associates
+            <input type="number" id="n6" value="0" min="0" step="1">
+          </label>
+          <label>9h associates
+            <input type="number" id="n9" value="0" min="0" step="1">
+          </label>
+          <label>12h associates
+            <input type="number" id="n12" value="0" min="0" step="1">
+          </label>
+          <div class="row">
+            <button id="suggestBtn">Suggest mix</button>
+            <button id="applySuggestBtn">Apply suggestion</button>
+            <span id="suggestText" class="help"></span>
+          </div>
+          <div class="row">
+            <label class="row"><input type="file" id="csvInput" accept=".csv,text/csv"></label>
+            <button id="exportBtn">Export CSV</button>
+            <button id="seedBtn">Load example</button>
+            <button id="clearBtn">Clear all</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex">
+        <div class="panel" style="flex:1">
+          <div class="help" style="margin-bottom:8px">Enter parcels per hour. We calculate the <b>Unpackers Needed</b> per hour using <code>ceil(hourly parcels ÷ PPH)</code>.</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Hour</th><th>Parcels</th><th>Unpackers Needed (ceil)</th></tr></thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+          <div class="help" style="margin-top:8px">Tip: Click any parcels cell to edit. Data saves in your browser.</div>
+        </div>
+        <aside class="panel right">
+          <h3 style="margin:0 0 8px 0">Shift guide</h3>
+          <div class="help">Effective hours (incl. breaks): 6h → 5.667h • 9h → 8.25h • 12h → 11h</div>
+          <hr class="sep">
+          <div class="help"><b>Headcount if all same shift</b></div>
+          <div class="row"><span class="badge">12h: <span id="h12">0</span></span><span class="badge">9h: <span id="h9">0</span></span><span class="badge">6h: <span id="h6">0</span></span></div>
+          <hr class="sep">
+          <div class="help">Additional 12h needed to cover gap: <b><span id="add12">0</span></b></div>
+          <hr class="sep">
+          <details>
+            <summary>How suggestions are calculated</summary>
+            <div class="help">We take today’s required person‑hours and fill with 12h first, then 9h, then 6h for any remainder.</div>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Returns SLA -->
+    <section id="returns" class="grid" style="display:none">
+      <div class="panel">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="row">
+            <button id="addBtn">+ Add Return</button>
+            <button id="expCsv">Export CSV</button>
+            <button id="impCsvBtn">Import CSV</button>
+            <input type="file" id="impCsv" accept=".csv,text/csv" style="display:none">
+            <button id="downJson">Download JSON</button>
+            <button id="loadJsonBtn">Load JSON</button>
+            <input type="file" id="loadJson" accept=".json" style="display:none">
+            <button id="clearReturns">Clear All</button>
+          </div>
+          <div class="row">
+            <label>Default SLA (hrs)<input type="number" id="defaultSla" value="48" min="1" step="1" style="width:90px;height:36px"></label>
+            <select id="stageFilter" style="height:36px">
+              <option value="">All stages</option>
+              <option>Received</option><option>QC</option><option>Despatched</option><option>Refunded</option>
+            </select>
+            <input id="searchBox" placeholder="Search..." style="height:36px;width:220px;border:1px solid var(--border);border-radius:8px;padding:0 8px">
+          </div>
+        </div>
+      </div>
+
+      <div class="flex">
+        <div class="panel" style="flex:1">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Return ID</th><th>Customer</th><th>Stage</th><th>Received</th><th>SLA (h)</th>
+                  <th>Age (h)</th><th>Time Left</th><th>Status</th><th>Assignee</th><th>Notes</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="rtbody"></tbody>
+            </table>
+          </div>
+          <div class="help" style="margin-top:8px">Status rules: <b>Breached</b> (Time Left &lt; 0), <b>Due Soon</b> (0–4h left), <b>On Track</b> (≥4h left). Age/time refresh every 30s.</div>
+        </div>
+
+        <aside class="panel right">
+          <h3 style="margin:0 0 8px 0">Quick Add / Edit</h3>
+          <div class="grid" style="grid-template-columns:1fr;gap:8px">
+            <label>Return ID <input class="small" id="q_id" placeholder="R-1001"></label>
+            <label>Customer <input class="small" id="q_cust" placeholder="Name / Order #"></label>
+            <label>Stage
+              <select class="small" id="q_stage">
+                <option>Received</option><option>QC</option><option>Despatched</option><option>Refunded</option>
+              </select>
+            </label>
+            <label>Received at
+              <input class="small" id="q_recv" type="datetime-local">
+            </label>
+            <div class="row"><button id="setNow">Set Now</button><span class="help">Use your local time</span></div>
+            <label>SLA (hrs) <input class="small" id="q_sla" type="number" min="1" value="48"></label>
+            <label>Assignee <input class="small" id="q_assignee" placeholder="Person / Team"></label>
+            <label>Notes <input class="small" id="q_notes" placeholder="Optional"></label>
+            <div class="row">
+              <button id="q_add">Add</button>
+              <button id="q_save" style="display:none">Save</button>
+              <button id="q_cancel" class="btn-ghost" style="display:none">Cancel</button>
+            </div>
+          </div>
+          <hr class="sep">
+          <h4 style="margin:0 0 6px 0">Activity Log</h4>
+          <div id="log" class="help"></div>
+        </aside>
+      </div>
+
+      <details class="panel">
+        <summary>How the SLA tool works</summary>
+        <div class="help">
+          <ul>
+            <li><b>Age (h)</b> = hours since <i>Received at</i>. <b>Time Left</b> = <i>SLA − Age</i>.</li>
+            <li><b>Status</b> chips colour by time left: green ≥ 4h; amber 0–4h; red &lt; 0h.</li>
+            <li>Use <b>Export CSV / Download JSON</b> to save; <b>Import / Load</b> to restore. Data is stored locally in your browser.</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+  </div>
+
+<script>
+/* ---------- Tabs ---------- */
+document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', e => {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const t = btn.dataset.tab;
+  document.getElementById('planner').style.display = (t==='planner') ? '' : 'none';
+  document.getElementById('returns').style.display = (t==='returns') ? '' : 'none';
+}));
+
+/* ---------- Unpacking Planner (no chart) ---------- */
+const STORE_KEY_PLANNER = "planner_v37";
+const hours = Array.from({length:24}, (_,i)=> i.toString().padStart(2,'0') + ":00");
+let plan = loadPlanner() || hours.map(h => ({ hour:h, parcels:0 }));
+const pphEl = document.getElementById('pph');
+const n6El = document.getElementById('n6'), n9El = document.getElementById('n9'), n12El = document.getElementById('n12');
+
+function eff6(){ return 5 + 40/60; }   // 5.6667
+function eff9(){ return 8 + 15/60; }   // 8.25
+function eff12(){ return 11.0; }
+
+function renderPlannerTable(){
+  const tbody = document.getElementById('tbody'); tbody.innerHTML='';
+  const rate = Number(pphEl.value) || 70;
+  for(const r of plan){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.hour}</td>`;
+    const tdP = document.createElement('td');
+    const inp = document.createElement('input'); inp.className='small'; inp.type='number'; inp.min='0'; inp.step='1'; inp.value = r.parcels;
+    inp.oninput = () => { r.parcels = +inp.value || 0; savePlanner(); updatePlannerKpis(); };
+    tdP.appendChild(inp); tr.appendChild(tdP);
+    const need = Math.ceil((r.parcels||0) / (rate||70));
+    tr.innerHTML += `<td>${need}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function plannerTotals(){
+  const total = plan.reduce((a,b)=> a + (b.parcels||0), 0);
+  const rate = Number(pphEl.value) || 70;
+  const reqPH = total / rate;
+  const capPH = eff6()*(+n6El.value||0) + eff9()*(+n9El.value||0) + eff12()*(+n12El.value||0);
+  const capParcels = capPH * rate;
+  return { total, rate, reqPH, capPH, capParcels };
+}
+
+function updatePlannerKpis(){
+  const t = plannerTotals();
+  document.getElementById('k_total').textContent = t.total.toLocaleString();
+  document.getElementById('k_req').textContent = t.reqPH.toFixed(1);
+  document.getElementById('k_capParcels').textContent = Math.round(t.capParcels).toLocaleString();
+  const k = document.getElementById('k_status');
+  if(t.capParcels >= t.total){ k.textContent = 'Capacity OK'; }
+  else { k.textContent = 'Need +' + Math.ceil(t.total - t.capParcels).toLocaleString() + ' parcels capacity'; }
+  // side: headcount same-shift
+  document.getElementById('h12').textContent = Math.ceil(t.reqPH / eff12());
+  document.getElementById('h9').textContent = Math.ceil(t.reqPH / eff9());
+  document.getElementById('h6').textContent = Math.ceil(t.reqPH / eff6());
+  document.getElementById('add12').textContent = Math.max(0, Math.ceil((t.total - t.capParcels) / (eff12()*t.rate)));
+}
+
+function savePlanner(){ localStorage.setItem(STORE_KEY_PLANNER, JSON.stringify({ plan, pph:+pphEl.value||70, n6:+n6El.value||0, n9:+n9El.value||0, n12:+n12El.value||0 })); }
+function loadPlanner(){ try{ const raw = localStorage.getItem(STORE_KEY_PLANNER); return raw? JSON.parse(raw).plan : null; } catch { return null; } }
+function loadAllPlanner(){ try{ const raw = localStorage.getItem(STORE_KEY_PLANNER); return raw? JSON.parse(raw) : null; } catch { return null; } }
+
+function suggestMix(){
+  const t = plannerTotals();
+  let rem = t.reqPH;
+  let s12 = Math.floor(rem / eff12()); rem -= s12*eff12();
+  let s9  = Math.floor(rem / eff9());  rem -= s9*eff9();
+  let s6  = Math.ceil(rem / eff6());   if(s6<0) s6=0;
+  return { s12, s9, s6, text: `Suggested: ${s12} ×12h, ${s9} ×9h, ${s6} ×6h` };
+}
+
+pphEl.oninput = () => { savePlanner(); updatePlannerKpis(); };
+n6El.oninput = n9El.oninput = n12El.oninput = () => { savePlanner(); updatePlannerKpis(); };
+document.getElementById('seedBtn').onclick = () => {
+  const sample = [0,3,5,8,12,40,80,150,210,180,140,120,110,95,85,70,60,55,50,40,30,20,10,5];
+  plan = hours.map((h,i)=> ({ hour:h, parcels: sample[i]||0 })); savePlanner(); renderPlannerTable(); updatePlannerKpis();
+};
+document.getElementById('clearBtn').onclick = () => {
+  if(!confirm('Clear all hours?')) return;
+  plan = hours.map(h => ({hour:h, parcels:0})); pphEl.value=70; n6El.value=n9El.value=n12El.value=0; savePlanner(); renderPlannerTable(); updatePlannerKpis();
+};
+document.getElementById('exportBtn').onclick = () => {
+  const lines = ['Hour,Parcels,UnpackersNeeded']; const rate = +pphEl.value||70;
+  for(const r of plan) lines.push(`${r.hour},${r.parcels},${Math.ceil((r.parcels||0)/rate)}`);
+  const blob = new Blob([lines.join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='unpacking_hours.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+document.getElementById('csvInput').addEventListener('change', async (e)=>{
+  const f=e.target.files[0]; if(!f) return; const text = await f.text(); const rows=text.split(/\r?\n/).filter(Boolean).slice(1);
+  const map = new Map(hours.map(h=>[h,0])); for(const line of rows){ const [h,p]=line.split(','); if(map.has(h)) map.set(h, +p||0); }
+  plan = hours.map(h => ({hour:h, parcels: map.get(h)||0})); savePlanner(); renderPlannerTable(); updatePlannerKpis(); e.target.value='';
+});
+document.getElementById('suggestBtn').onclick = () => { document.getElementById('suggestText').textContent = suggestMix().text; };
+document.getElementById('applySuggestBtn').onclick = () => { const s = suggestMix(); n12El.value=s.s12; n9El.value=s.s9; n6El.value=s.s6; savePlanner(); updatePlannerKpis(); };
+
+(function initPlanner(){
+  const all = loadAllPlanner(); if(all){ plan = all.plan || plan; if(all.pph) pphEl.value=all.pph; n6El.value=all.n6||0; n9El.value=all.n9||0; n12El.value=all.n12||0; }
+  renderPlannerTable(); updatePlannerKpis();
+})();
+
+/* ---------- Returns SLA (local) ---------- */
+const STORE_KEY_RET = "returns_v37";
+let returns = loadReturns() || [];
+const rtbody = document.getElementById('rtbody');
+const defaultSla = document.getElementById('defaultSla');
+const stageFilter = document.getElementById('stageFilter'); const searchBox = document.getElementById('searchBox');
+const log = document.getElementById('log');
+
+function saveReturns(){ localStorage.setItem(STORE_KEY_RET, JSON.stringify({ returns, defaultSla:+defaultSla.value||48 })); }
+function loadReturns(){ try{ const raw = localStorage.getItem(STORE_KEY_RET); if(!raw) return null; const obj=JSON.parse(raw); defaultSla.value = obj.defaultSla||48; return obj.returns||[]; } catch { return null; } }
+
+function addLog(t){ const ts=new Date().toLocaleString(); const p=document.createElement('div'); p.textContent=`${ts} — ${t}`; log.prepend(p); }
+
+function hoursBetween(a,b){ return (b - a) / 36e5; }
+function fmt2(x){ return (Math.round(x*100)/100).toFixed(2); }
+
+function statusChip(timeLeft){
+  if(timeLeft < 0) return '<span class="status-pill st-red">● Breached</span>';
+  if(timeLeft <= 4) return '<span class="status-pill st-amber">● Due Soon</span>';
+  return '<span class="status-pill st-green">● On Track</span>';
+}
+
+function renderReturns(){
+  rtbody.innerHTML='';
+  const q = searchBox.value.trim().toLowerCase(); const f = stageFilter.value;
+  for(const r of returns){
+    if(f && r.stage!==f) continue;
+    const text = (r.id+' '+r.customer+' '+(r.assignee||'')+' '+(r.notes||'')).toLowerCase();
+    if(q && !text.includes(q)) continue;
+    const now = new Date(); const recv = new Date(r.received);
+    const age = hoursBetween(recv, now); const left = (r.sla||48) - age;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(r.id||'')}</td>
+      <td>${escapeHtml(r.customer||'')}</td>
+      <td>${escapeHtml(r.stage||'')}</td>
+      <td>${new Date(r.received).toLocaleString()}</td>
+      <td>${r.sla||48}</td>
+      <td>${fmt2(age)}</td>
+      <td>${fmt2(left)}</td>
+      <td>${statusChip(left)}</td>
+      <td>${escapeHtml(r.assignee||'')}</td>
+      <td>${escapeHtml(r.notes||'')}</td>
+      <td class="actions">
+        <button data-act="edit">Edit</button>
+        <button data-act="del">Delete</button>
+      </td>`;
+    tr.querySelector('[data-act="edit"]').onclick = () => loadIntoForm(r);
+    tr.querySelector('[data-act="del"]').onclick = () => { if(confirm('Delete this return?')){ returns = returns.filter(x => x!==r); saveReturns(); renderReturns(); addLog('Deleted '+(r.id||'')); } };
+    rtbody.appendChild(tr);
+  }
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m] )); }
+
+/* Quick Add / Edit */
+const q_id = document.getElementById('q_id'), q_cust=document.getElementById('q_cust'), q_stage=document.getElementById('q_stage'), q_recv=document.getElementById('q_recv'), q_sla=document.getElementById('q_sla'), q_assignee=document.getElementById('q_assignee'), q_notes=document.getElementById('q_notes');
+const btnAdd=document.getElementById('q_add'), btnSave=document.getElementById('q_save'), btnCancel=document.getElementById('q_cancel'), setNow=document.getElementById('setNow');
+setNow.onclick = () => { const d=new Date(); const z=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); q_recv.value=z; };
+
+function clearForm(){ q_id.value=q_cust.value=q_assignee.value=q_notes.value=''; q_stage.value='Received'; q_sla.value=defaultSla.value||48; q_recv.value=''; btnAdd.style.display=''; btnSave.style.display='none'; btnCancel.style.display='none'; btnSave.onclick=null; btnCancel.onclick=null; }
+
+function loadIntoForm(r){
+  q_id.value=r.id||''; q_cust.value=r.customer||''; q_stage.value=r.stage||'Received'; q_sla.value=r.sla||48; q_assignee.value=r.assignee||''; q_notes.value=r.notes||'';
+  const z = new Date(new Date(r.received).getTime()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16); q_recv.value=z;
+  btnAdd.style.display='none'; btnSave.style.display=''; btnCancel.style.display=''; 
+  btnSave.onclick = () => { Object.assign(r, readForm()); saveReturns(); renderReturns(); clearForm(); addLog('Edited '+(r.id||'')); };
+  btnCancel.onclick = clearForm;
+}
+
+function readForm(){
+  return {
+    id: q_id.value.trim(),
+    customer: q_cust.value.trim(),
+    stage: q_stage.value,
+    received: q_recv.value ? new Date(q_recv.value).toISOString() : new Date().toISOString(),
+    sla: +q_sla.value||(+defaultSla.value||48),
+    assignee: q_assignee.value.trim(),
+    notes: q_notes.value.trim()
+  };
+}
+
+document.getElementById('addBtn').onclick = () => { clearForm(); };
+btnAdd.onclick = () => { const r=readForm(); returns.unshift(r); saveReturns(); renderReturns(); clearForm(); addLog('Added '+(r.id||'')); };
+
+document.getElementById('clearReturns').onclick = () => { if(!confirm('Clear all returns?')) return; returns=[]; saveReturns(); renderReturns(); addLog('Cleared all'); };
+defaultSla.oninput = () => { saveReturns(); };
+
+// CSV/JSON
+document.getElementById('expCsv').onclick = () => {
+  const fields = ['id','customer','stage','received','sla','assignee','notes'];
+  const lines = ['Return ID,Customer,Stage,Received,SLA,Assignee,Notes'];
+  for(const r of returns){ lines.push(fields.map(f => (r[f]||'').toString().replace(/"/g,'""')).map(s=> `"${s}"`).join(',')); }
+  const blob = new Blob([lines.join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='returns.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+document.getElementById('impCsvBtn').onclick = () => document.getElementById('impCsv').click();
+document.getElementById('impCsv').addEventListener('change', async (e)=>{
+  const f=e.target.files[0]; if(!f) return; const text=await f.text(); const rows=text.split(/\r?\n/).filter(Boolean).slice(1);
+  for(const line of rows){
+    const cols = parseCsvLine(line);
+    if(!cols.length) continue;
+    returns.push({ id:cols[0], customer:cols[1], stage:cols[2], received: new Date(cols[3]).toISOString(), sla:+cols[4]||(+defaultSla.value||48), assignee:cols[5], notes:cols[6] });
+  }
+  saveReturns(); renderReturns(); addLog('Imported CSV ('+rows.length+' rows)'); e.target.value='';
+});
+function parseCsvLine(line){
+  const out=[]; let cur=''; let q=false;
+  for(let i=0;i<line.length;i++){ const c=line[i];
+    if(c=='"'){ if(q && line[i+1]=='"'){ cur+='"'; i++; } else { q=!q; } }
+    else if(c==',' && !q){ out.push(cur); cur=''; }
+    else { cur+=c; }
+  } out.push(cur); return out.map(s=>s.trim());
+}
+
+document.getElementById('downJson').onclick = () => {
+  const blob=new Blob([JSON.stringify({ returns, defaultSla:+defaultSla.value||48 }, null, 2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='returns.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+document.getElementById('loadJsonBtn').onclick = () => document.getElementById('loadJson').click();
+document.getElementById('loadJson').addEventListener('change', async (e)=>{
+  const f=e.target.files[0]; if(!f) return; const text=await f.text(); try{
+    const obj=JSON.parse(text); returns = obj.returns||[]; if(obj.defaultSla) defaultSla.value=obj.defaultSla;
+    saveReturns(); renderReturns(); addLog('Loaded JSON ('+(returns.length)+' rows)');
+  }catch{ alert('Invalid JSON'); } e.target.value='';
+});
+
+searchBox.oninput = stageFilter.onchange = () => renderReturns();
+
+// Timer to refresh age/timeleft
+setInterval(renderReturns, 30*1000);
+
+// init
+(function initReturns(){ renderReturns(); })();
+</script>
+</body>
+</html>
