@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SLA Return Processing Planner (v3.6 + Unpacking)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin:20px; background:#fff9fc; }
+    h1 { color:#ff3f8a; }
+    .card { background:white; padding:15px; border-radius:12px; box-shadow:0 0 10px rgba(0,0,0,0.1); margin-bottom:20px; }
+    label { display:block; margin-top:10px; font-weight:bold; }
+    input, button, textarea { width:100%; padding:8px; margin-top:5px; border-radius:8px; border:1px solid #ddd; }
+    button { background:#ff6aa4; color:white; font-weight:bold; border:none; cursor:pointer; }
+    button:hover { background:#ff3f8a; }
+    table { width:100%; border-collapse:collapse; margin-top:15px; }
+    th, td { padding:8px; border-bottom:1px solid #eee; text-align:left; }
+    .ok { color:green; font-weight:bold; }
+    .bad { color:red; font-weight:bold; }
+  </style>
+</head>
+<body>
+  <h1>SLA Return Processing Planner</h1>
+  <div class="card">
+    <h2>Inputs</h2>
+    <label>Pallets</label>
+    <input type="number" id="pallets" value="10">
+    <label>Parcels per pallet</label>
+    <input type="number" id="parcels_per_pallet" value="80">
+    <label>Unpacked parcels</label>
+    <input type="number" id="unpacked_parcels" value="0">
+    <label>Items per parcel</label>
+    <input type="number" id="items_per_parcel" value="2">
+    <label>Unpack rate (parcels/hr)</label>
+    <input type="number" id="unpack_rate" value="70">
+    <label>Process rate (items/hr)</label>
+    <input type="number" id="process_rate" value="30">
+    <label>SLA (hours)</label>
+    <input type="number" id="sla_hours" value="24">
+    <button onclick="calculate()">Calculate suggestions</button>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div id="results">Enter values and click calculate.</div>
+  </div>
+
+<script>
+function calculate(){
+  let pallets = +document.getElementById('pallets').value;
+  let parcelsPerPallet = +document.getElementById('parcels_per_pallet').value;
+  let unpacked = +document.getElementById('unpacked_parcels').value;
+  let itemsPerParcel = +document.getElementById('items_per_parcel').value;
+  let unpackRate = +document.getElementById('unpack_rate').value;
+  let processRate = +document.getElementById('process_rate').value;
+  let slaHours = +document.getElementById('sla_hours').value;
+
+  let totalParcels = pallets * parcelsPerPallet;
+  let toUnpack = Math.max(0,totalParcels - unpacked);
+  let totalItems = totalParcels * itemsPerParcel;
+
+  let reqUnpackHrs = toUnpack / unpackRate;
+  let reqProcHrs = totalItems / processRate;
+  let totalReq = reqUnpackHrs + reqProcHrs;
+
+  let within = totalReq <= slaHours;
+
+  let html = `<p>Total parcels: <b>${totalParcels}</b></p>`;
+  html += `<p>Parcels to unpack: <b>${toUnpack}</b></p>`;
+  html += `<p>Total items: <b>${totalItems}</b></p>`;
+  html += `<p>Required hours (unpack): <b>${reqUnpackHrs.toFixed(1)}</b></p>`;
+  html += `<p>Required hours (process): <b>${reqProcHrs.toFixed(1)}</b></p>`;
+  html += `<p>Total required hours: <b>${totalReq.toFixed(1)}</b></p>`;
+  html += `<p>SLA horizon: <b>${slaHours}</b> hours</p>`;
+  html += within ? `<p class='ok'>✅ Within SLA</p>` : `<p class='bad'>⚠️ Not within SLA</p>`;
+
+  document.getElementById('results').innerHTML = html;
+}
+</script>
+</body>
+</html>
