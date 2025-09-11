@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unpacking → Return Processing planner (v4.0)</title>
+<style>
+  :root{
+    --bg:#ffe6ee; --card:#ffd6e4; --text:#2a0e18; --muted:#6a334a; --line:#f2b8cd;
+    --pill:#fff2f7; --accent:#ff5ca8; --accent-2:#ff80bd;
+    --good:#16a34a; --warn:#f59e0b; --bad:#ef4444;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial}
+  .wrap{max-width:1200px;margin:0 auto;padding:22px}
+  header{display:flex;gap:14px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .chip{background:var(--pill);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-weight:700}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 8px 18px rgba(0,0,0,.05)}
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+  .col-2{grid-column:span 2}.col-3{grid-column:span 3}.col-4{grid-column:span 4}.col-6{grid-column:span 6}.col-8{grid-column:span 8}.col-12{grid-column:span 12}
+  @media (max-width:1000px){.grid{grid-template-columns:repeat(6,1fr)} .col-6,.col-4,.col-3,.col-2,.col-8{grid-column:span 6}}
+  @media (max-width:700px){.grid{grid-template-columns:repeat(2,1fr)} .col-6,.col-4,.col-3,.col-2,.col-8{grid-column:span 2}}
+  h1{font-size:20px;margin:0}
+  .tile{background:#ffeef5;border:1px solid var(--line);border-radius:12px;padding:12px}
+  .muted{color:var(--muted)} .num{font-size:22px;font-weight:900}
+  label{display:flex;justify-content:space-between;align-items:center;font-weight:800;margin:6px 0}
+  input[type=number], input[type=date], input[type=text]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#fff;outline:none}
+  input:focus{box-shadow:0 0 0 3px rgba(255,92,168,.2)}
+  .btn{border:1px solid transparent;background:var(--accent);color:#fff;font-weight:900;border-radius:10px;padding:9px 14px;cursor:pointer}
+  .btn:hover{background:var(--accent-2)} .btn.out{background:transparent;border:1px solid var(--line);color:var(--text)}
+  .pill{background:var(--pill);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+  .stack{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .badge{font-weight:900;border-radius:999px;padding:2px 8px}
+  .b-good{background:#d1fadf;color:#065f46;border:1px solid #86efac}
+  .b-warn{background:#fff3c4;color:#854d0e;border:1px solid #fde68a}
+  .b-bad{background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca}
+  table{width:100%;border-collapse:collapse}
+  th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left}
+  footer{margin-top:8px;color:var(--muted);font-size:12px;text-align:right}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Unpacking → Return Processing planner</h1>
+    <div class="chip">v4.0</div>
+    <div class="chip">Achievable rates locked</div>
+    <div class="stack" style="margin-left:auto">
+      <button class="btn out" id="copySlack">Copy Slack summary</button>
+      <input id="slackUrl" type="text" placeholder="Slack webhook (optional)" style="min-width:240px">
+      <button class="btn out" id="sendSlack">Send</button>
+      <span class="muted" id="msg"></span>
+    </div>
+  </header>
+
+  <!-- Locked rates -->
+  <div class="card">
+    <div class="stack" style="gap:16px;flex-wrap:wrap;align-items:center">
+      <div class="pill" style="display:flex;gap:6px;align-items:center">
+        <span>Achievable unpack rate:</span>
+        <input id="ach_unp" type="number" min="30" max="120" step="1" value="70" style="width:90px">
+        <span class="muted">parcels/h</span>
+      </div>
+      <div class="pill" style="display:flex;gap:6px;align-items:center">
+        <span>Achievable processing rate:</span>
+        <input id="ach_proc" type="number" min="15" max="80" step="1" value="30" style="width:90px">
+        <span class="muted">items/h</span>
+      </div>
+      <div class="pill" style="display:flex;gap:6px;align-items:center">
+        <span>Items per parcel:</span>
+        <input id="ach_ipp" type="number" min="1" max="8" step="0.1" value="1.9" style="width:90px">
+      </div>
+      <div class="pill">Shifts: 12h (eff. 11h) • 9h (8.5h) • 6h (5.5h)</div>
+    </div>
+    <div class="muted" style="margin-top:6px">If unpack &lt; 60 p/h or process &lt; 28 items/h a reason is required; it will appear in the Slack summary.</div>
+  </div>
+  
+  <!-- Reason modal -->
+  <div id="reason_modal" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.25);z-index:50">
+    <div class="card" style="max-width:520px;width:92%;background:#fff7fb">
+      <h3 style="margin:0 0 8px">Add reason for lower target</h3>
+      <div class="muted" style="margin-bottom:6px">Please explain why the achievable target is lower than standard.</div>
+      <textarea id="reason_text" style="width:100%;min-height:120px;border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff"></textarea>
+      <div class="stack" style="margin-top:10px;justify-content:flex-end">
+        <button class="btn out" id="reason_cancel">Cancel</button>
+        <button class="btn" id="reason_save">Save reason</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:12px">
+    <!-- UK block -->
+    <div class="col-6 card">
+      <h2 style="margin:0 0 8px">UK</h2>
+      <div class="muted" style="margin-bottom:6px">Couriers: ASDA (140), EVRI (170), INPOST (140) parcels/pallet.</div>
+
+      <div class="grid">
+        <div class="col-4">
+          <label>ASDA pallets</label>
+          <input id="uk_asda_pallets" type="number" min="0" step="1" value="0">
+          <div class="muted" style="font-size:12px">140 parcels/pallet 🔒</div>
+        </div>
+        <div class="col-4">
+          <label>EVRI pallets</label>
+          <input id="uk_evri_pallets" type="number" min="0" step="1" value="0">
+          <div class="muted" style="font-size:12px">170 parcels/pallet 🔒</div>
+        </div>
+        <div class="col-4">
+          <label>INPOST pallets</label>
+          <input id="uk_inpost_pallets" type="number" min="0" step="1" value="0">
+          <div class="muted" style="font-size:12px">140 parcels/pallet 🔒</div>
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:6px">
+        <div class="col-6">
+          <label>Oldest packed date (UK)</label>
+          <input id="uk_packed_date" type="date">
+        </div>
+        <div class="col-6">
+          <label>Oldest unpacked date (UK)</label>
+          <input id="uk_unpacked_date" type="date">
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:6px">
+        <div class="col-6">
+          <label>Already unpacked parcels (UK)</label>
+          <input id="uk_unpacked_parcels" type="number" min="0" step="1" value="0">
+        </div>
+        <div class="col-6">
+          <div class="pill">Traffic light (age): ≤3d 🟢 • 4–6 🟠 • &gt;6 🔴</div>
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:6px">
+        <div class="col-12">
+          <div class="tile">
+            <div class="muted">Extra streams (not included in totals)</div>
+            <div class="grid" style="margin-top:6px">
+              <div class="col-6">
+                <label>INT Mexico pallets</label>
+                <input id="int_mex_pallets" type="number" min="0" step="1" value="0">
+                <label style="margin-top:6px">Oldest date (INT Mexico)</label>
+                <input id="int_mex_date" type="date">
+              </div>
+              <div class="col-6">
+                <label>Return To Sender (INT) pallets</label>
+                <input id="rts_int_pallets" type="number" min="0" step="1" value="0">
+                <label style="margin-top:6px">Oldest date (RTS INT)</label>
+                <input id="rts_int_date" type="date">
+              </div>
+              <div class="col-6">
+                <label>Return To Sender (UK) pallets</label>
+                <input id="rts_uk_pallets" type="number" min="0" step="1" value="0">
+                <label style="margin-top:6px">Oldest date (RTS UK)</label>
+                <input id="rts_uk_date" type="date">
+              </div>
+              <div class="col-6">
+                <label>Obsoletes (e.g. Australia returns) pallets</label>
+                <input id="obsolete_pallets" type="number" min="0" step="1" value="0">
+                <label style="margin-top:6px">Oldest date (Obsoletes)</label>
+                <input id="obsolete_date" type="date">
+              </div>
+            </div>
+            <div class="muted" style="margin-top:6px">These are estimated for planning but excluded from totals.</div>
+            <div class="grid" style="margin-top:6px">
+              <div class="col-6 tile"><div class="muted">Estimated hours (unpack)</div><div class="num" id="extra_h_unp">0.0</div></div>
+              <div class="col-6 tile"><div class="muted">Estimated hours (process)</div><div class="num" id="extra_h_proc">0.0</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tile" style="margin-top:8px">
+        <div class="stack"><span class="muted">UK totals</span></div>
+        <div class="grid" style="margin-top:6px">
+          <div class="col-3"><div class="muted">Packed parcels</div><div class="num" id="uk_packed_parcels">0</div></div>
+          <div class="col-3"><div class="muted">Unpacked parcels</div><div class="num" id="uk_unpacked_parcels_out">0</div></div>
+          <div class="col-3"><div class="muted">Total items</div><div class="num" id="uk_items">0</div></div>
+          <div class="col-3"><div class="muted">Hours need (tot)</div><div class="num" id="uk_hours_total">0.0</div></div>
+        </div>
+        <div class="grid" style="margin-top:6px">
+          <div class="col-3"><div class="muted">Unpack hours</div><div class="num" id="uk_hours_unpack">0.0</div></div>
+          <div class="col-3"><div class="muted">Process hours</div><div class="num" id="uk_hours_process">0.0</div></div>
+          <div class="col-3"><div class="muted">Packed age</div><div class="num" id="uk_packed_age">0</div><div id="uk_packed_badge" class="muted"></div></div>
+          <div class="col-3"><div class="muted">Unpacked age</div><div class="num" id="uk_unpacked_age">0</div><div id="uk_unpacked_badge" class="muted"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INT block -->
+    <div class="col-6 card">
+      <h2 style="margin:0 0 8px">International</h2>
+      <div class="grid">
+        <div class="col-6">
+          <label>INT pallets</label>
+          <input id="int_pallets" type="number" min="0" step="1" value="0">
+          <div class="muted" style="font-size:12px">140 parcels/pallet 🔒</div>
+        </div>
+        <div class="col-6">
+          <label>Already unpacked parcels (INT)</label>
+          <input id="int_unpacked_parcels" type="number" min="0" step="1" value="0">
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:6px">
+        <div class="col-6">
+          <label>Oldest packed date (INT)</label>
+          <input id="int_packed_date" type="date">
+        </div>
+        <div class="col-6">
+          <label>Oldest unpacked date (INT)</label>
+          <input id="int_unpacked_date" type="date">
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:6px">
+        <div class="col-12">
+          <div class="tile">
+            <div class="muted">Extra streams (not included in totals)</div>
+            <div class="grid" style="margin-top:6px">
+              <div class="col-6">
+                <label>INT Mexico pallets</label>
+                <input id="int_mex_pallets" type="number" min="0" step="1" value="0">
+                <label style="margin-top:6px">Oldest date (INT Mexico)</label>
+                <input id="int_mex_date" type="date">
+              </div>
+              <div class="col-6">
+                <label>Return To Sender (INT) pallets</label>
+                <input id="rts_int_pallets" type="number" min="0" step="1" value="0">
+                <label style="margin-top:6px">Oldest date (RTS INT)</label>
+                <input id="rts_int_date" type="date">
+              </div>
+              <div class="col-6">
+                <label>Return To Sender (UK) pallets</label>
+                <input id="rts_uk_pallets" type="number" min="0" step="1" value="0">
+                <label style="margin-top:6px">Oldest date (RTS UK)</label>
+                <input id="rts_uk_date" type="date">
+              </div>
+              <div class="col-6">
+                <label>Obsoletes (e.g. Australia returns) pallets</label>
+                <input id="obsolete_pallets" type="number" min="0" step="1" value="0">
+                <label style="margin-top:6px">Oldest date (Obsoletes)</label>
+                <input id="obsolete_date" type="date">
+              </div>
+            </div>
+            <div class="muted" style="margin-top:6px">These are estimated for planning but excluded from totals.</div>
+            <div class="grid" style="margin-top:6px">
+              <div class="col-6 tile"><div class="muted">Estimated hours (unpack)</div><div class="num" id="extra_h_unp">0.0</div></div>
+              <div class="col-6 tile"><div class="muted">Estimated hours (process)</div><div class="num" id="extra_h_proc">0.0</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tile" style="margin-top:8px">
+        <div class="stack"><span class="muted">INT totals</span></div>
+        <div class="grid" style="margin-top:6px">
+          <div class="col-3"><div class="muted">Packed parcels</div><div class="num" id="int_packed_parcels">0</div></div>
+          <div class="col-3"><div class="muted">Unpacked parcels</div><div class="num" id="int_unpacked_parcels_out">0</div></div>
+          <div class="col-3"><div class="muted">Total items</div><div class="num" id="int_items">0</div></div>
+          <div class="col-3"><div class="muted">Hours need (tot)</div><div class="num" id="int_hours_total">0.0</div></div>
+        </div>
+        <div class="grid" style="margin-top:6px">
+          <div class="col-3"><div class="muted">Unpack hours</div><div class="num" id="int_hours_unpack">0.0</div></div>
+          <div class="col-3"><div class="muted">Process hours</div><div class="num" id="int_hours_process">0.0</div></div>
+          <div class="col-3"><div class="muted">Packed age</div><div class="num" id="int_packed_age">0</div><div id="int_packed_badge" class="muted"></div></div>
+          <div class="col-3"><div class="muted">Unpacked age</div><div class="num" id="int_unpacked_age">0</div><div id="int_unpacked_badge" class="muted"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shifts and suggestions -->
+  <div class="grid" style="margin-top:12px">
+    <div class="col-12 card">
+      <h2 style="margin:0 0 8px">Shift availability & suggestions</h2>
+      <div class="grid">
+        <div class="col-2"><label>12h (eff.11h)</label><input id="n12" type="number" min="0" value="0"></div>
+        <div class="col-2"><label>9h (eff.8.5h)</label><input id="n9" type="number" min="0" value="0"></div>
+        <div class="col-2"><label>6h (eff.5.5h)</label><input id="n6" type="number" min="0" value="0"></div>
+        <div class="col-3"><label>Optional OT per person (h)</label><input id="otpp" type="number" min="0" step="0.5" value="0"></div>
+        <div class="col-3" style="display:flex;align-items:end"><button class="btn" id="recalc">Recalculate</button></div>
+      </div>
+
+      <div class="grid" style="margin-top:8px">
+        <div class="col-3 tile"><div class="muted">Total hours required</div><div class="num" id="tot_hours_need">0.0</div></div>
+        <div class="col-3 tile"><div class="muted">Total hours available</div><div class="num" id="tot_hours_avail">0.0</div></div>
+        <div class="col-3 tile"><div class="muted">Status</div><div class="num" id="status_text">—</div></div>
+        <div class="col-3 tile"><div class="muted">OT to keep UK &amp; fix INT</div><div class="num" id="ot_keep_uk_fix_int">0.0</div></div>
+      </div>
+
+      <div class="grid" style="margin-top:8px">
+        <div class="col-6 tile">
+          <div class="muted">Minimum concurrent to hit Green (&lt;5d)</div>
+          <table>
+            <thead><tr><th>Stream</th><th>Min people</th><th>Time left (h)</th><th>Band</th></tr></thead>
+            <tbody id="min_table"></tbody>
+          </table>
+        </div>
+        <div class="col-6 tile">
+          <div class="muted">Suggested split now</div>
+          <table>
+            <thead><tr><th>Stream</th><th>Suggested people</th><th>Hours need</th><th>Band</th></tr></thead>
+            <tbody id="split_table"></tbody>
+          </table>
+          <div class="muted" id="hint" style="margin-top:6px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Totals -->
+  <div class="grid" style="margin-top:12px">
+    <div class="col-12 card">
+      <h2 style="margin:0 0 8px">Totals</h2>
+      <table>
+        <thead><tr><th>Type</th><th>Packed parcels</th><th>Unpacked parcels</th><th>Total items</th><th>Unpack h</th><th>Process h</th><th>Total h</th></tr></thead>
+        <tbody id="totals_table"></tbody>
+      </table>
+      <footer>v4.0 • add <code>?v=now</code> to bypass cache</footer>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const fmt=(n,dp=1)=>Number.isFinite(n)? (Math.round(n*10)/10).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp}) : '0.0';
+  const toInt=n=>Number.isFinite(+n)? +n:0;
+  const P_ASDA=140, P_EVRI=170, P_INP=140, P_INT=140;
+  let IPP=1.9, UNP_RATE=70, PROC_RATE=30;
+  const E12=11, E9=8.5, E6=5.5;
+  const SLA = { UK:{green:3, amber:6, red:6}, INT:{green:5, amber:7, red:8} };
+
+  function todayISO(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
+  function daysSince(isoDate){
+    if(!isoDate) return 0;
+    const d=new Date(isoDate+'T00:00:00'), t=new Date();
+    d.setHours(0,0,0,0); t.setHours(0,0,0,0);
+    return Math.max(0, Math.round((t-d)/86400000));
+  }
+  function band(age, region){
+    const thr = region==='UK'? SLA.UK : SLA.INT;
+    if(age>thr.red) return ['b-bad','Red','🔴'];
+    if(age>thr.green) return ['b-warn','Amber','🟠'];
+    return ['b-good','Green','🟢'];
+  }
+
+  function calcRegionUK(){
+    const asda=toInt($('uk_asda_pallets_hidden').value)*P_ASDA;
+    const evri=toInt($('uk_evri_pallets_hidden').value)*P_EVRI;
+    const inpo=toInt($('uk_inpost_pallets_hidden').value)*P_INP;
+    const packedParcels = asda+evri+inpo;
+    const unpackedParcels = Math.max(0, toInt($('uk_unpacked_parcels').value));
+    const items = (packedParcels + unpackedParcels) * IPP;
+    const hUnp = packedParcels/UNP_RATE;
+    const hProc = items/PROC_RATE;
+    const agePacked = daysSince($('uk_packed_date').value);
+    const ageUnpacked = daysSince($('uk_unpacked_date').value);
+    return {packedParcels, unpackedParcels, items, hUnp, hProc, hTot:hUnp+hProc, agePacked, ageUnpacked};
+  }
+
+  function calcRegionINT(){
+    const packedParcels = toInt($('int_pallets_hidden').value)*P_INT;
+    const unpackedParcels = Math.max(0, toInt($('int_unpacked_parcels').value));
+    const items = (packedParcels + unpackedParcels) * IPP;
+    const hUnp = packedParcels/UNP_RATE;
+    const hProc = items/PROC_RATE;
+    const agePacked = daysSince($('int_packed_date').value);
+    const ageUnpacked = daysSince($('int_unpacked_date').value);
+    return {packedParcels, unpackedParcels, items, hUnp, hProc, hTot:hUnp+hProc, agePacked, ageUnpacked};
+  }
+
+  function timeLeftHours(ageDays, region){ const g = (region==='UK'?SLA.UK.green:SLA.INT.green); return Math.max(0, g*24 - ageDays*24); } // to Green
+
+  function render(){
+    // sync achievable targets from inputs
+    UNP_RATE = toInt($('ach_unp').value) || 70;
+    PROC_RATE = toInt($('ach_proc').value) || 30;
+    IPP = +($('ach_ipp').value) || 1.9;
+
+    const uk = calcRegionUK();
+    const it = calcRegionINT();
+
+    // Extra streams (excluded from totals) - assume same parcels/pallet as INT
+    const ex_mex = toInt($('int_mex_pallets')?.value || 0) * P_INT;
+    const ex_rts_int = toInt($('rts_int_pallets')?.value || 0) * P_INT;
+    const ex_rts_uk = toInt($('rts_uk_pallets')?.value || 0) * P_INT;
+    const ex_obs = toInt($('obsolete_pallets')?.value || 0) * P_INT;
+    const extra_parcels = ex_mex + ex_rts_int + ex_rts_uk + ex_obs;
+    const extra_items = extra_parcels * IPP;
+    const ex_h_unp = extra_parcels/UNP_RATE;
+    const ex_h_proc = extra_items/PROC_RATE;
+    if ($('extra_h_unp')) $('extra_h_unp').textContent = fmt(ex_h_unp);
+    if ($('extra_h_proc')) $('extra_h_proc').textContent = fmt(ex_h_proc);
+
+    // UK tiles
+    $('uk_packed_parcels').textContent = (uk.packedParcels).toLocaleString();
+    $('uk_unpacked_parcels_out').textContent = (uk.unpackedParcels).toLocaleString();
+    $('uk_items').textContent = Math.round(uk.items).toLocaleString();
+    $('uk_hours_unpack').textContent = fmt(uk.hUnp);
+    $('uk_hours_process').textContent = fmt(uk.hProc);
+    $('uk_hours_total').textContent = fmt(uk.hTot);
+    $('uk_packed_age').textContent = uk.agePacked;
+    $('uk_unpacked_age').textContent = uk.ageUnpacked;
+    const [b1,t1,i1]=band(uk.agePacked,'UK'), [b2,t2,i2]=band(uk.ageUnpacked,'UK');
+    $('uk_packed_badge').innerHTML = `<span class="badge ${b1}">${t1}</span>`;
+    $('uk_unpacked_badge').innerHTML = `<span class="badge ${b2}">${t2}</span>`;
+
+    // INT tiles
+    $('int_packed_parcels').textContent = (it.packedParcels).toLocaleString();
+    $('int_unpacked_parcels_out').textContent = (it.unpackedParcels).toLocaleString();
+    $('int_items').textContent = Math.round(it.items).toLocaleString();
+    $('int_hours_unpack').textContent = fmt(it.hUnp);
+    $('int_hours_process').textContent = fmt(it.hProc);
+    $('int_hours_total').textContent = fmt(it.hTot);
+    $('int_packed_age').textContent = it.agePacked;
+    $('int_unpacked_age').textContent = it.ageUnpacked;
+    const [b3,t3,i3]=band(it.agePacked,'INT'), [b4,t4,i4]=band(it.ageUnpacked,'INT');
+    $('int_packed_badge').innerHTML = `<span class="badge ${b3}">${t3}</span>`;
+    $('int_unpacked_badge').innerHTML = `<span class="badge ${b4}">${t4}</span>`;
+
+    // Totals + shifts
+    const Htot = uk.hTot + it.hTot;
+    const n12=toInt($('n12').value), n9=toInt($('n9').value), n6=toInt($('n6').value);
+    const otpp=toInt($('otpp').value);
+    const ppl = n12+n9+n6;
+    const avail = n12*E12 + n9*E9 + n6*E6 + ppl*otpp;
+
+    $('tot_hours_need').textContent = fmt(Htot);
+    $('tot_hours_avail').textContent = fmt(avail);
+    $('status_text').textContent = avail>=Htot? 'Capacity OK' : 'Shortfall '+fmt(Htot-avail)+'h';
+
+    // Stream minima (time-left)
+    const streams=[
+      {key:'UK-Unpack', region:'UK', h:uk.hUnp, age:uk.agePacked},
+      {key:'UK-Process', region:'UK', h:uk.hProc, age:uk.ageUnpacked},
+      {key:'INT-Unpack', region:'INT', h:it.hUnp, age:it.agePacked},
+      {key:'INT-Process', region:'INT', h:it.hProc, age:it.ageUnpacked},
+    ];
+
+    const minRows=[], splitRows=[];
+    const weights=[];
+    let minSum=0;
+    streams.forEach(s=>{
+      const tl = timeLeftHours(s.age, s.region);
+      const minPeople = tl>0 ? Math.ceil(s.h/Math.max(0.1, tl)) : Math.ceil(s.h/11); // aim 1 long shift if beyond Green window
+      minSum += minPeople;
+      const [bc,tt,ico]=band(s.age, s.region);
+      minRows.push(`<tr><td>${s.key}</td><td>${minPeople}</td><td>${fmt(tl)}</td><td><span class="badge ${bc}">${tt}</span></td></tr>`);
+      // weight by band (Red 3, Amber 2, Green 1) and by hours
+      const w = (tt==='Red'?3:tt==='Amber'?2:1) * (s.h+0.01);
+      weights.push(w);
+    });
+    $('min_table').innerHTML = minRows.join('');
+
+    // Suggested split
+    let remainingPeople = Math.max(0, ppl - minSum);
+    const sugg = streams.map((s,i)=>{
+      const tl=timeLeftHours(s.age, s.region);
+      const minP = tl>0 ? Math.ceil(s.h/Math.max(0.1, tl)) : Math.ceil(s.h/11);
+      return {key:s.key, h:s.h, age:s.age, min:minP, add:0};
+    });
+
+    const wSum = weights.reduce((a,b)=>a+b,0) || 1;
+    sugg.forEach((s,i)=>{
+      const share = Math.floor( remainingPeople * (weights[i]/wSum) );
+      s.add += share;
+      remainingPeople -= share;
+    });
+    // distribute any residue
+    let i=0; while(remainingPeople>0){ sugg[i%sugg.length].add++; remainingPeople--; i++; }
+
+    const split = sugg.map(s=>({key:s.key, ppl:s.min+s.add, h:s.h, age:s.age}));
+
+    split.forEach(s=>{
+      const [bc,tt,ico]=band(s.age, s.region);
+      splitRows.push(`<tr><td>${s.key}</td><td>${s.ppl}</td><td>${fmt(s.h)}</td><td><span class="badge ${bc}">${tt}</span></td></tr>`);
+    });
+    $('split_table').innerHTML = splitRows.join('');
+
+    // OT needed to keep UK & fix INT (reach Green in both)
+    // Reserve minimum UK headcount to stay Green
+    const minUK = streams.filter(s=>s.region==='UK').reduce((a,s)=>a + (timeLeftHours(s.age, 'UK')>0 ? Math.ceil(s.h/Math.max(0.1, timeLeftHours(s.age,'UK'))) : Math.ceil(s.h/11)), 0);
+    const capAfterUK = Math.max(0, ppl - minUK);
+    const needINT = streams.filter(s=>s.region==='INT').reduce((a,s)=>a + (timeLeftHours(s.age,'INT')>0 ? Math.ceil(s.h/Math.max(0.1,timeLeftHours(s.age,'INT'))) : Math.ceil(s.h/11)), 0);
+    const pplShortForINT = Math.max(0, needINT - capAfterUK);
+    const otKeep = pplShortForINT * 11; // full-time hours equivalent on 12h shift
+    $('ot_keep_uk_fix_int').textContent = fmt(otKeep);
+
+    // Hint about OT
+    let hint='';
+    if (avail < Htot){
+      const short = Htot - avail;
+      hint = `Short by ~${fmt(short)}h. Options: add OT ≈ ${fmt(short/Math.max(1,ppl))}h per person, or +${Math.ceil(short/11)} staff on 12h.`;
+    } else {
+      hint = 'You can meet Green. Use the split table to keep UK ≤3d and INT ≤5d; rebalance hourly.';
+    }
+    $('hint').textContent = hint;
+
+    // Totals table
+    const rows=[];
+    rows.push(`<tr><td>UK</td><td>${(uk.packedParcels).toLocaleString()}</td><td>${(uk.unpackedParcels).toLocaleString()}</td><td>${Math.round(uk.items).toLocaleString()}</td><td>${fmt(uk.hUnp)}</td><td>${fmt(uk.hProc)}</td><td>${fmt(uk.hTot)}</td></tr>`);
+    rows.push(`<tr><td>International</td><td>${(it.packedParcels).toLocaleString()}</td><td>${(it.unpackedParcels).toLocaleString()}</td><td>${Math.round(it.items).toLocaleString()}</td><td>${fmt(it.hUnp)}</td><td>${fmt(it.hProc)}</td><td>${fmt(it.hTot)}</td></tr>`);
+    rows.push(`<tr><td><b>Grand total</b></td><td><b>${(uk.packedParcels+it.packedParcels).toLocaleString()}</b></td><td><b>${(uk.unpackedParcels+it.unpackedParcels).toLocaleString()}</b></td><td><b>${Math.round(uk.items+it.items).toLocaleString()}</b></td><td><b>${fmt(uk.hUnp+it.hUnp)}</b></td><td><b>${fmt(uk.hProc+it.hProc)}</b></td><td><b>${fmt(uk.hTot+it.hTot)}</b></td></tr>`);
+    $('totals_table').innerHTML = rows.join('');
+  }
+
+  function summaryText(){
+    const n12=toInt($('n12').value), n9=toInt($('n9').value), n6=toInt($('n6').value);
+    const uk = calcRegionUK(), it = calcRegionINT();
+    const Htot = uk.hTot + it.hTot;
+    const ppl = n12+n9+n6;
+    const avail = n12*E12 + n9*E9 + n6*E6 + ppl*(toInt($('otpp').value));
+
+    const rUnp = window._reason_unp || ''; const rProc = window._reason_proc || '';
+    return [
+      '*Unpack → Process planner (v4.0)*',
+      `UK: ${uk.packedParcels} packed / ${uk.unpackedParcels} unpacked → items ${Math.round(uk.items)}`,
+      `INT: ${it.packedParcels} packed / ${it.unpackedParcels} unpacked → items ${Math.round(it.items)}`,
+      `Hours need — UK ${fmt(uk.hTot)} (U ${fmt(uk.hUnp)} + P ${fmt(uk.hProc)}), INT ${fmt(it.hTot)} (U ${fmt(it.hUnp)} + P ${fmt(it.hProc)})`,
+      `Total need ${fmt(Htot)}h • Available ${fmt(avail)}h (12h:${n12}, 9h:${n9}, 6h:${n6}, OTpp:${toInt($('otpp').value)}h)`,
+      `Ages — UK packed ${uk.agePacked}d, unpacked ${uk.ageUnpacked}d; INT packed ${it.agePacked}d, unpacked ${it.ageUnpacked}d (UK: 🟢≤3/🟠4–6/🔴>6 | INT: 🟢≤5/🟠6–7/🔴>8)`,
+      (UNP_RATE<60 && rUnp? `Unpack target ${UNP_RATE}/h — reason: ${rUnp}`: ''),
+      (PROC_RATE<28 && rProc? `Process target ${PROC_RATE}/h — reason: ${rProc}`: '')
+    ].filter(Boolean).join('\n');
+  }
+
+  // Wire events
+  ['uk_asda_pallets_hidden','uk_evri_pallets_hidden','uk_inpost_pallets_hidden','uk_packed_date','uk_unpacked_date','uk_unpacked_parcels',
+   'int_pallets_hidden','int_unpacked_parcels','int_packed_date','int_unpacked_date',
+   'int_mex_pallets','int_mex_date','rts_int_pallets','rts_int_date','rts_uk_pallets','rts_uk_date','obsolete_pallets','obsolete_date',
+   'n12','n9','n6','otpp','ach_unp','ach_proc','ach_ipp']
+    .forEach(id=>{ if($(id)) $(id).addEventListener('input', render); });
+
+  // enforce reasons when targets are lowered
+  function ensureReason(kind){
+    const value = kind==='unp'? toInt($('ach_unp').value): toInt($('ach_proc').value);
+    const threshold = kind==='unp'? 60 : 28;
+    if (value < threshold){
+      const modal = $('reason_modal');
+      modal.style.display='flex';
+      $('reason_text').value = (kind==='unp'? (window._reason_unp||'') : (window._reason_proc||''));
+      return new Promise(resolve=>{
+        const onCancel=()=>{ modal.style.display='none'; resolve(false); };
+        const onSave=()=>{ const txt = $('reason_text').value.trim(); if(kind==='unp'){ window._reason_unp=txt; } else { window._reason_proc=txt; } modal.style.display='none'; resolve(true); };
+        $('reason_cancel').onclick = onCancel; $('reason_save').onclick = onSave;
+      });
+    }
+    return Promise.resolve(true);
+  }
+  $('ach_unp').addEventListener('change', ()=>ensureReason('unp').then(render));
+  $('ach_proc').addEventListener('change', ()=>ensureReason('proc').then(render));
+  $('recalc').addEventListener('click', render);
+
+  $('copySlack').addEventListener('click', ()=>{
+    const text = summaryText();
+    navigator.clipboard.writeText(text).then(()=>{$('msg').textContent='Copied';}).catch(()=>{$('msg').textContent='Copy blocked';});
+  });
+  $('sendSlack').addEventListener('click', async()=>{
+    const url=$('slackUrl').value.trim(); if(!url){$('msg').textContent='Add Slack webhook'; return;}
+    try{
+      const res = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:summaryText()})});
+      $('msg').textContent = res.ok ? 'Sent to Slack' : 'Slack error';
+    }catch(e){ $('msg').textContent='Slack send failed'; }
+  });
+
+  // init: set dates to today for safety
+  const today = todayISO();
+  $('uk_packed_date').value = today;
+  $('uk_unpacked_date').value = today;
+  $('int_packed_date').value = today;
+  $('int_unpacked_date').value = today;
+  if($('int_mex_date')) $('int_mex_date').value=today;
+  if($('rts_int_date')) $('rts_int_date').value=today;
+  if($('rts_uk_date')) $('rts_uk_date').value=today;
+  if($('obsolete_date')) $('obsolete_date').value=today;
+  render();
+  // add default rows for repeaters
+  if (typeof addRow_uk_asda_pallets==='function') { addRow_uk_asda_pallets(); }
+  if (typeof addRow_uk_evri_pallets==='function') { addRow_uk_evri_pallets(); }
+  if (typeof addRow_uk_inpost_pallets==='function') { addRow_uk_inpost_pallets(); }
+  if (typeof addRow_int_pallets==='function') { addRow_int_pallets(); }
+
+
+  // enforce reasons when target thresholds go below standard
+  let pendingReasonType = null;
+  const modal = $('reason_modal');
+  function openReason(which){
+    pendingReasonType = which;
+    if (modal) modal.style.display='flex';
+    if ($('reason_text')) $('reason_text').value='';
+  }
+  function closeReason(){
+    if (modal) modal.style.display='none';
+  }
+  if ($('reason_cancel')) $('reason_cancel').addEventListener('click', ()=>{ closeReason(); });
+  if ($('reason_save')) $('reason_save').addEventListener('click', ()=>{
+    const txt = ($('reason_text')?.value||'').trim();
+    if (pendingReasonType==='unp') window._reason_unp = txt;
+    if (pendingReasonType==='proc') window._reason_proc = txt;
+    closeReason();
+    render();
+  });
+
+  // Watch for threshold drops and prompt once if no reason provided
+  ['ach_unp','ach_proc'].forEach(id=>{
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener('change', ()=>{
+      const val = +el.value;
+      if (id==='ach_unp' && val<60 && !window._reason_unp){ openReason('unp'); }
+      if (id==='ach_proc' && val<28 && !window._reason_proc){ openReason('proc'); }
+    });
+  });
+
+})();
+</script>
+</body>
+</html>
