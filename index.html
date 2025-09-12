@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Unpack → Return Processing Planner v5.3</title>
+<title>Unpack → Return Processing Planner v5.4</title>
 <style>
   :root{ --bg:#ffe6f5; --card:#fff7fb; --line:#f0cce0; --ink:#400033; }
   *{box-sizing:border-box}
@@ -33,7 +33,7 @@
 </style>
 </head>
 <body>
-<h1>Unpack → Return Processing Planner v5.3</h1>
+<h1>Unpack → Return Processing Planner v5.4</h1>
 <div class="container">
 
   <div class="card">
@@ -48,7 +48,6 @@
   <div class="card">
     <h2>UK Couriers</h2>
     <div class="legend">SLA UK: ≤3d 🟢 • ≤6d 🟠 • &gt;6d 🔴</div>
-
     <div class="section-totals" id="uk_totals"></div>
 
     <h3 style="margin:10px 0 6px">Packed backlog (pallets by courier & date)</h3>
@@ -69,7 +68,6 @@
   <div class="card">
     <h2>International Couriers</h2>
     <div class="legend">SLA INT: ≤5d 🟢 • ≤7d 🟠 • &gt;8d 🔴</div>
-
     <div class="section-totals" id="int_totals"></div>
 
     <h3 style="margin:10px 0 6px">Packed backlog (pallets by date)</h3>
@@ -89,7 +87,7 @@
 
   <div class="card">
     <h2>Special Returns (excluded)</h2>
-    <div class="legend">RTS • Mexico • Axima — assumed 120 orders/pallet. Mexico/Axima: unpack 40/h; process 28/h. RTS: same person, 50 items/h total. Badges shown per row by date.</div>
+    <div class="legend">RTS • Mexico • Axima — 120 orders/pallet. Mexico/Axima: unpack 40/h; process 28/h. RTS: same person, 50 items/h combined. Badges shown per row by date.</div>
     <div id="ret_wrap"></div>
     <button class="btn out" type="button" onclick="addRow('ret')">+ Add Return row</button>
     <div class="grid" style="margin-top:12px">
@@ -99,7 +97,7 @@
   </div>
 
   <div class="card">
-    <h2>Shift availability & Forecast</h2>
+    <h2>Shift availability & Split plan</h2>
     <div class="grid">
       <div class="col-3">
         <label>12h shifts (eff. 11h)</label>
@@ -121,8 +119,8 @@
 
     <div class="grid" style="margin-top:10px">
       <div class="col-4 tile"><div class="muted">Need today (to Green)</div><div class="num" id="need_today">0 parcels to unpack • 0 items to process</div></div>
-      <div class="col-4 tile"><div class="muted">Capacity with people</div><div class="num" id="cap_today">0 parcels (unpack) • 0 items (process)</div></div>
-      <div class="col-4 tile"><div class="muted">Status</div><div class="num" id="status_text">—</div></div>
+      <div class="col-4 tile"><div class="muted">Recommended split</div><div class="num" id="rec_split">0.0h unpack • 0.0h process (0.0h spare)</div></div>
+      <div class="col-4 tile"><div class="muted">With split we achieve</div><div class="num" id="achieve_today">0 parcels unpack • 0 items process</div></div>
     </div>
 
     <div class="grid" style="margin-top:10px">
@@ -292,12 +290,10 @@ function fmt(n){return (Math.round(n*10)/10).toFixed(1)}
 function sumBy(arr,fn){return arr.reduce((a,x)=>a+fn(x),0);}
 
 function computeToGreenPacked(rows, greenDays){
-  // rows: [{age, pallets}], return pallets that must be cleared today to bring oldest <= greenDays
   const older = rows.filter(r=>r.age>greenDays).sort((a,b)=>b.age-a.age);
   return sumBy(older, r=>r.pallets);
 }
 function computeToGreenUnpacked(rows, greenDays){
-  // rows: [{age, parcels}], return parcels to process today
   const older = rows.filter(r=>r.age>greenDays);
   return sumBy(older, r=>r.parcels);
 }
@@ -307,60 +303,54 @@ function render(){
   PROC_RATE=+document.getElementById('ach_proc').value||28;
   IPP=+document.getElementById('ach_ipp').value||1.9;
 
-  // === UK packed rows (group per courier for totals & ages) ===
-  let ukPackedRows=[]; // [{courier, age, pallets}]
+  // === UK ===
+  let ukPackedRows=[], ukUnpRows=[];
   document.querySelectorAll('#uk_wrap .grid').forEach(r=>{
     const c=r.querySelector('.uk_courier')?.value||'ASDA';
     const d=r.querySelector('.uk_date')?.value; const p=+r.querySelector('.uk_pallets')?.value||0;
     const age=d?daysBetween(d):0;
     ukPackedRows.push({courier:c, age, pallets:p});
   });
-  // per courier totals (packed)
-  const couriers=['ASDA','EVRI','INPOST'];
-  const ukPackedParByCourier = {};
-  couriers.forEach(c=> ukPackedParByCourier[c] = sumBy(ukPackedRows.filter(r=>r.courier===c), r=>r.pallets)*PPL_UK_INT );
-  // UK unpacked rows
-  let ukUnpRows=[]; // [{age, parcels}]
   document.querySelectorAll('#uk_unp_wrap .grid').forEach(r=>{
     const d=r.querySelector('.uk_unp_date')?.value; const n=+r.querySelector('.uk_unp_parcels')?.value||0;
     const age=d?daysBetween(d):0;
     ukUnpRows.push({age, parcels:n});
   });
-  // UK totals for section header
+
+  const couriers=['ASDA','EVRI','INPOST'];
+  const ukPackedParByCourier = {};
+  couriers.forEach(c=> ukPackedParByCourier[c] = sumBy(ukPackedRows.filter(r=>r.courier===c), r=>r.pallets)*PPL_UK_INT );
   const ukPackedParTotal = sumBy(ukPackedRows, r=>r.pallets)*PPL_UK_INT;
   const ukPackedItemsTotal = ukPackedParTotal*IPP;
   const ukUnpParTotal = sumBy(ukUnpRows, r=>r.parcels);
   const ukUnpItemsTotal = ukUnpParTotal*IPP;
 
-  // === INT packed/unpacked ===
-  let intPackedRows=[]; // [{age, pallets}]
+  // === INT ===
+  let intPackedRows=[], intUnpRows=[];
   document.querySelectorAll('#int_wrap .grid').forEach(r=>{
     const d=r.querySelector('.int_date')?.value; const p=+r.querySelector('.int_pallets')?.value||0;
     const age=d?daysBetween(d):0;
     intPackedRows.push({age, pallets:p});
   });
-  let intUnpRows=[]; // [{age, parcels}]
   document.querySelectorAll('#int_unp_wrap .grid').forEach(r=>{
     const d=r.querySelector('.int_unp_date')?.value; const n=+r.querySelector('.int_unp_parcels')?.value||0;
     const age=d?daysBetween(d):0;
     intUnpRows.push({age, parcels:n});
   });
+
   const intPackedParTotal = sumBy(intPackedRows, r=>r.pallets)*PPL_UK_INT;
   const intPackedItemsTotal = intPackedParTotal*IPP;
   const intUnpParTotal = sumBy(intUnpRows, r=>r.parcels);
   const intUnpItemsTotal = intUnpParTotal*IPP;
 
-  // === Section headers (UK per courier + unpacked) ===
-  const ukTotalsEl = document.getElementById('uk_totals');
-  const ukLines = [
-    `Packed parcels — ASDA ${ukPackedParByCourier.ASDA||0}, EVRI ${ukPackedParByCourier.EVRI||0}, INPOST ${ukPackedParByCourier.INPOST||0}`,
-    `Packed items — ASDA ${(ukPackedParByCourier.ASDA*IPP||0).toFixed(0)}, EVRI ${(ukPackedParByCourier.EVRI*IPP||0).toFixed(0)}, INPOST ${(ukPackedParByCourier.INPOST*IPP||0).toFixed(0)}`,
-    `Unpacked (UK): ${ukUnpParTotal} parcels • ${(ukUnpItemsTotal).toFixed(0)} items`
-  ];
-  ukTotalsEl.textContent = ukLines.join('  |  ');
-
-  const intTotalsEl = document.getElementById('int_totals');
-  intTotalsEl.textContent = `Packed: ${intPackedParTotal} parcels • ${intPackedItemsTotal.toFixed(0)} items  |  Unpacked: ${intUnpParTotal} parcels • ${intUnpItemsTotal.toFixed(0)} items`;
+  // === Section headers ===
+  document.getElementById('uk_totals').textContent =
+    `Packed parcels — ASDA ${ukPackedParByCourier.ASDA||0}, EVRI ${ukPackedParByCourier.EVRI||0}, INPOST ${ukPackedParByCourier.INPOST||0} | `+
+    `Packed items — ASDA ${(ukPackedParByCourier.ASDA*IPP||0).toFixed(0)}, EVRI ${(ukPackedParByCourier.EVRI*IPP||0).toFixed(0)}, INPOST ${(ukPackedParByCourier.INPOST*IPP||0).toFixed(0)} | `+
+    `Unpacked (UK): ${ukUnpParTotal} parcels • ${(ukUnpItemsTotal).toFixed(0)} items`;
+  document.getElementById('int_totals').textContent =
+    `Packed: ${intPackedParTotal} parcels • ${intPackedItemsTotal.toFixed(0)} items | `+
+    `Unpacked: ${intUnpParTotal} parcels • ${intUnpItemsTotal.toFixed(0)} items`;
 
   // === Oldest ages ===
   const ukOldPacked = ukPackedRows.length? Math.max(...ukPackedRows.map(r=>r.age)):0;
@@ -383,53 +373,87 @@ function render(){
   const intToGreenUnpPar = computeToGreenUnpacked(intUnpRows, SLA.INT.green);
   const intToGreenProcItems = intToGreenUnpPar * IPP;
 
-  // Hours required today (to Green)
+  // Hours to Green by region
   const ukUnpH = ukToGreenPar/UNP_RATE;
   const ukProcH = ukToGreenProcItems/PROC_RATE;
   const intUnpH = intToGreenPar/UNP_RATE;
   const intProcH = intToGreenProcItems/PROC_RATE;
-
   document.getElementById('uk_hours').textContent = fmt(ukUnpH)+' unp + '+fmt(ukProcH)+' proc';
   document.getElementById('int_hours').textContent = fmt(intUnpH)+' unp + '+fmt(intProcH)+' proc';
 
-  // === Returns hours (unchanged logic) ===
-  let retOld=0; let retRows=[];
-  let retUnpH=0, retProcH=0, retParTotal=0, retItemsTotal=0;
+  // === Returns ===
+  let retOld=0; let retUnpH=0, retProcH=0;
   document.querySelectorAll('#ret_wrap .grid').forEach(r=>{
     const c=r.querySelector('.ret_courier')?.value||'RTS';
     const d=r.querySelector('.ret_date')?.value; const p=+r.querySelector('.ret_pallets')?.value||0;
-    const age=d?daysBetween(d):0;
-    retRows.push([c,d,p]); if(d){retOld=Math.max(retOld,age);}
-    const orders = p*PPL_RET; retParTotal += orders; retItemsTotal += orders; // orders=items
+    const age=d?daysBetween(d):0; if(d){retOld=Math.max(retOld,age);} 
+    const orders = p*PPL_RET;
     if(c==='MEXICO' || c==='AXIMA'){
       retUnpH += orders / MEX_UNP_RATE;
-      retProcH += orders / PROC_RATE; // assume 28/h
+      retProcH += orders / PROC_RATE;
     } else if(c==='RTS'){
-      retProcH += orders / RTS_COMBINED_RATE; // combined
+      retProcH += orders / RTS_COMBINED_RATE;
     }
   });
   document.getElementById('ret_old').textContent = retOld;
   document.getElementById('ret_hours').textContent = fmt(retUnpH)+' unpack + '+fmt(retProcH)+' process (RTS combined within process)';
 
-  // === Availability & Forecast ===
+  // === Availability ===
   const n12=+document.getElementById('n12').value||0;
   const n9 =+document.getElementById('n9').value||0;
   const n6 =+document.getElementById('n6').value||0;
-  const avail = n12*11 + n9*8.5 + n6*5.5;
-  document.getElementById('tot_avail').textContent = fmt(avail);
+  const H = n12*11 + n9*8.5 + n6*5.5;
+  document.getElementById('tot_avail').textContent = fmt(H);
 
+  // === Need totals (to Green today) ===
   const needParToday = ukToGreenPar + intToGreenPar;
   const needItemsToday = ukToGreenProcItems + intToGreenProcItems;
   document.getElementById('need_today').textContent = `${needParToday} parcels to unpack • ${needItemsToday.toFixed(0)} items to process`;
 
-  const capPar = avail * UNP_RATE;
-  const capItems = avail * PROC_RATE;
-  document.getElementById('cap_today').textContent = `${Math.floor(capPar)} parcels (unpack) • ${Math.floor(capItems)} items (process)`;
+  // === Recommended split (coupled) ===
+  const reqUnpH = needParToday/UNP_RATE;
+  const reqProcH = needItemsToday/PROC_RATE;
+  const reqSum = reqUnpH + reqProcH;
 
-  const feasible = (capPar>=needParToday) && (capItems>=needItemsToday);
-  document.getElementById('status_text').textContent = feasible?'OK':'Short';
+  let planUnpH=0, planProcH=0, spareH=0;
 
-  // === OT helper as before (region-aware, based on hours to Green)
+  if (H >= reqSum){
+    planUnpH = reqUnpH;
+    planProcH = reqProcH;
+    spareH = H - reqSum;
+  } else {
+    const scale = H / Math.max(1e-6, reqSum);
+    let tempUnp = reqUnpH * scale;
+    let tempProc = reqProcH * scale;
+
+    // Supply constraint for processing: items processed cannot exceed items backlog + items from what we actually unpack today
+    const itemsFromUnp = Math.min(needParToday, tempUnp*UNP_RATE) * IPP;
+    let maxProcessItems = needItemsToday + itemsFromUnp;
+    let targetProcessItems = Math.min(maxProcessItems, tempProc*PROC_RATE);
+
+    if (targetProcessItems < tempProc*PROC_RATE){
+      // shift some time from processing to unpacking to unlock more items until no hours left
+      const deficit = (tempProc*PROC_RATE) - targetProcessItems;
+      const extraUnpNeeded = deficit / (IPP*UNP_RATE);
+      const canShift = Math.min(extraUnpNeeded, tempProc); // can't shift more than we have in process
+      tempUnp += canShift;
+      tempProc -= canShift;
+    }
+    // final
+    planUnpH = Math.max(0,tempUnp);
+    planProcH = Math.max(0,tempProc);
+    spareH = Math.max(0, H - (planUnpH + planProcH));
+  }
+
+  // Achievable with split
+  const parcelsUnp = Math.min(needParToday, planUnpH*UNP_RATE);
+  const itemsByUnp = parcelsUnp * IPP;
+  const itemsProc = Math.min(needItemsToday + itemsByUnp, planProcH*PROC_RATE);
+
+  document.getElementById('rec_split').textContent = `${fmt(planUnpH)}h unpack • ${fmt(planProcH)}h process (${fmt(spareH)}h spare)`;
+  document.getElementById('achieve_today').textContent = `${Math.floor(parcelsUnp)} parcels unpack • ${Math.floor(itemsProc)} items process`;
+
+  // OT helper (to-Green basis)
   const streams=[
     {key:'UK-Unpack',region:'UK',h:ukUnpH,age:ukOldPacked},
     {key:'UK-Process',region:'UK',h:ukProcH,age:Math.max(ukOldUnp,ukOldPacked)},
@@ -450,7 +474,7 @@ function render(){
   const otKeep = pplShort * 11;
   document.getElementById('ot_keep').textContent = fmt(otKeep);
 
-  // === Tables (to Green hours basis) ===
+  // Tables
   const minT=document.querySelector('#min_table tbody');
   const splitT=document.querySelector('#split_table tbody');
   minT.innerHTML=''; splitT.innerHTML='';
@@ -466,58 +490,35 @@ function render(){
     splitT.appendChild(tr2);
   });
 
-  // bottom note
-  const [bU, tU]=band(Math.max(ukOldPacked,ukOldUnp),'UK');
-  const [bI, tI]=band(Math.max(intOldPacked,intOldUnp),'INT');
-  document.getElementById('summary_note').textContent = `Today we only target what is needed to stay Green (UK ≤3d, INT ≤5d). With ${fmt(avail)} h available, you can do ~${Math.floor(capPar)} parcels and ~${Math.floor(capItems)} items. Need today: ${needParToday} parcels & ${needItemsToday.toFixed(0)} items. Status: ${feasible?'OK':'SHORT'}.`;
+  document.getElementById('summary_note').textContent = `We plan only what is needed to stay Green (UK ≤3d, INT ≤5d). The split deducts unpack hours from the same pool so processing is fed. Changing targets updates all forecasts immediately.`;
 
   // Store for Slack
-  window._UK={packedRows:ukPackedRows,unpRows:ukUnpRows,oldPacked:ukOldPacked,oldUnp:ukOldUnp,packedParTotal:ukPackedParTotal,packedItemsTotal:ukPackedItemsTotal,unpParTotal:ukUnpParTotal,unpItemsTotal:ukUnpItemsTotal, toGreenPar:ukToGreenPar, toGreenItems:ukToGreenProcItems};
-  window._INT={packedRows:intPackedRows,unpRows:intUnpRows,oldPacked:intOldPacked,oldUnp:intOldUnp,packedParTotal:intPackedParTotal,packedItemsTotal:intPackedItemsTotal,unpParTotal:intUnpParTotal,unpItemsTotal:intUnpItemsTotal, toGreenPar:intToGreenPar, toGreenItems:intToGreenProcItems};
-  window._RET={rows:retRows,old:retOld,retUnpH,retProcH,retParTotal,retItemsTotal};
-  window._CAP={avail,capPar,capItems,needParToday,needItemsToday,otKeep};
+  window._CAP={H,planUnpH,planProcH,parcelsUnp,itemsProc,spareH,otKeep,needParToday,needItemsToday};
 }
 
 function copySlack(){
   const achUnp=+document.getElementById('ach_unp').value;
   const achProc=+document.getElementById('ach_proc').value;
-  let lines=['*Unpack → Return Processing Planner v5.3*'];
+  let lines=['*Unpack → Return Processing Planner v5.4*'];
   if(achUnp<65) lines.push(`Unpack target ${achUnp}/h — reason: ${window._reason_unp||'N/A'}`);
   if(achProc<28) lines.push(`Process target ${achProc}/h — reason: ${window._reason_proc||'N/A'}`);
 
-  lines.push('\n*UK*');
-  const uk=window._UK;
-  uk.packedRows.forEach(r=>lines.push(`${r.courier} — ${r.pallets} pallets (age ${r.age}d)`));
-  uk.unpRows.forEach(r=>lines.push(`Unpacked — ${r.parcels} parcels (age ${r.age}d)`));
-  lines.push(`Totals: Packed ${uk.packedParTotal} parcels / ${uk.packedItemsTotal.toFixed(0)} items | Unpacked ${uk.unpParTotal} parcels / ${uk.unpItemsTotal.toFixed(0)} items`);
-  lines.push(`Need to Green today: ${uk.toGreenPar} parcels to unpack • ${uk.toGreenItems.toFixed(0)} items to process`);
-
-  lines.push('\n*International*');
-  const it=window._INT;
-  it.packedRows.forEach(r=>lines.push(`INT — ${r.pallets} pallets (age ${r.age}d)`));
-  it.unpRows.forEach(r=>lines.push(`Unpacked — ${r.parcels} parcels (age ${r.age}d)`));
-  lines.push(`Totals: Packed ${it.packedParTotal} parcels / ${it.packedItemsTotal.toFixed(0)} items | Unpacked ${it.unpParTotal} parcels / ${it.unpItemsTotal.toFixed(0)} items`);
-  lines.push(`Need to Green today: ${it.toGreenPar} parcels to unpack • ${it.toGreenItems.toFixed(0)} items to process`);
-
-  lines.push('\n*Special Returns* (excluded)');
-  const rt=window._RET;
-  rt.rows.forEach(r=>lines.push(`${r[0]} — ${r[2]} pallets`));
-  lines.push(`Hours: ${rt.retUnpH.toFixed(1)} unpack + ${rt.retProcH.toFixed(1)} process`);
-
-  const C=window._CAP;
-  lines.push('\n*Capacity & OT*');
-  lines.push(`Capacity with people: ~${Math.floor(C.capPar)} parcels unpack • ~${Math.floor(C.capItems)} items process (from ${C.avail.toFixed(1)} h)`);
-  lines.push(`Need today: ${C.needParToday} parcels • ${C.needItemsToday.toFixed(0)} items`);
-  lines.push(`OT to keep UK & fix INT: ~${C.otKeep.toFixed(1)} h`);
+  const C=window._CAP||{};
+  lines.push('\n*Plan to stay Green today*');
+  lines.push(`Need: ${C.needParToday||0} parcels to unpack • ${(C.needItemsToday||0).toFixed?C.needItemsToday.toFixed(0):0} items to process`);
+  lines.push(`Split: ${ (C.planUnpH||0).toFixed(1) }h unpack • ${ (C.planProcH||0).toFixed(1) }h process (spare ${(C.spareH||0).toFixed(1)}h)`);
+  lines.push(`Will do: ~${Math.floor(C.parcelsUnp||0)} parcels unpack • ~${Math.floor(C.itemsProc||0)} items process`);
+  lines.push(`OT to keep UK & fix INT: ~${ (C.otKeep||0).toFixed(1) }h`);
 
   navigator.clipboard.writeText(lines.join('\n')).then(()=>alert('Copied to clipboard'));
 }
 
+// thresholds reason capture
 document.addEventListener('DOMContentLoaded',()=>{
-  document.getElementById('ach_unp').addEventListener('change',e=>{ if(+e.target.value<65 && !window._reason_unp) openReason('unp'); });
-  document.getElementById('ach_proc').addEventListener('change',e=>{ if(+e.target.value<28 && !window._reason_proc) openReason('proc'); });
+  document.getElementById('ach_unp').addEventListener('change',e=>{ if(+e.target.value<65 && !window._reason_unp) openReason('unp'); render(); });
+  document.getElementById('ach_proc').addEventListener('change',e=>{ if(+e.target.value<28 && !window._reason_proc) openReason('proc'); render(); });
+  document.getElementById('ach_ipp').addEventListener('input',render);
   ['n12','n9','n6'].forEach(id=>document.getElementById(id).addEventListener('input',render));
-  // default rows
   addRow('uk'); addRow('uk_unp');
   addRow('int'); addRow('int_unp');
   addRow('ret');
