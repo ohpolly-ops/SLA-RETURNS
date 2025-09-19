@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Unpack → Return Processing Planner v7.1</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root{ --bg:#ffe6f5; --card:#fff7fb; --line:#f0cce0; --ink:#3f0034; }
+  *{box-sizing:border-box}
+  body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);margin:0;color:var(--ink)}
+  h1{margin:24px 20px 8px}
+  h2{margin:0 0 8px}
+  .container{padding:0 20px 40px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 2px 4px rgba(0,0,0,.04)}
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+  .col-1{grid-column:span 1}.col-2{grid-column:span 2}.col-3{grid-column:span 3}
+  .col-4{grid-column:span 4}.col-5{grid-column:span 5}.col-6{grid-column:span 6}
+  .col-7{grid-column:span 7}.col-8{grid-column:span 8}.col-12{grid-column:span 12}
+  input,select{width:100%;padding:8px;border-radius:10px;border:1px solid #d9b6c8;background:#fff}
+  button{padding:8px 12px;border-radius:10px;border:none;cursor:pointer}
+  .btn{background:#d63384;color:#fff}.btn.out{background:#fff;color:#d63384;border:1px solid #d63384}
+  .pill{background:#ffd6eb;padding:6px 10px;border-radius:16px;display:inline-flex;align-items:center;gap:8px;margin-right:8px}
+  .tile{background:#fff;border:1px dashed #f0cce0;border-radius:12px;padding:10px}
+  .num{font-weight:700}
+  .muted{color:#6e6071;font-size:.9rem}
+  .small{font-size:.85rem}
+  .badge{padding:2px 8px;border-radius:999px;font-weight:600;font-size:.75rem}
+  .b-good{background:#c6f6c6}.b-warn{background:#ffe6a6}.b-bad{background:#ffb3b3}
+  .rowline{border-bottom:1px dashed #eed4e5;padding-bottom:8px;margin-bottom:8px}
+  .legend{font-size:.85rem;color:#5a4d57}
+  table{border-collapse:collapse;width:100%;margin-top:8px}
+  th,td{border:1px solid #ead0df;padding:6px 8px;font-size:.92rem;text-align:left}
+  th{background:#f8d6ea}
+</style>
+</head>
+<body>
+<h1>Unpack → Return Processing Planner v7.1</h1>
+<div class="container">
+
+  <!-- SHIFT + TARGETS + STAFFING (uses tracker-derived workload) -->
+  <div class="card">
+    <h2>Shift availability & Split plan</h2>
+    <div class="grid">
+      <div class="col-3"><label>12h shifts (eff. 11h)</label><input id="n12" type="number" min="0" step="1" value="9"></div>
+      <div class="col-3"><label>9h shifts (eff. 8.5h)</label><input id="n9" type="number" min="0" step="1" value="1"></div>
+      <div class="col-3"><label>6h shifts (eff. 5.5h)</label><input id="n6" type="number" min="0" step="1" value="0"></div>
+      <div class="col-3 tile"><div class="muted">Hours available</div><div class="num" id="tot_avail">0.0</div></div>
+    </div>
+
+    <div style="margin:10px 0; display:flex; gap:10px; flex-wrap:wrap">
+      <span class="pill">Unpack target <input id="ach_unp" type="number" value="65" min="20" max="120" style="width:90px">/h</span>
+      <span class="pill">Process target <input id="ach_proc" type="number" value="28" min="10" max="80" style="width:90px">/h</span>
+      <span class="pill">Items/parcel <input id="ach_ipp" type="number" value="1.9" step="0.1" style="width:90px"></span>
+      <button class="btn" onclick="copySlack()">Copy Slack summary</button>
+    </div>
+
+    <div class="grid">
+      <div class="col-4 tile">
+        <div class="muted">Need today (to Green from tracker)</div>
+        <div class="num" id="need_today">0 parcels • 0 items</div>
+        <div class="small" id="need_hours">0.0h unp • 0.0h proc</div>
+      </div>
+      <div class="col-8 tile">
+        <div class="muted">Concrete staffing plan (people & hours)</div>
+        <div class="num" id="staff_plan">—</div>
+        <div class="small" id="staff_cap">Capacity: —</div>
+        <div class="small" id="gaps_line">Gaps: —</div>
+      </div>
+
+      <div class="col-12 tile">
+        <div class="muted">What to do today</div>
+        <div class="num" id="what_to_do">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GLOBAL OVERVIEW -->
+  <div class="card">
+    <div class="grid">
+      <div class="col-3 tile"><div class="muted">Backlog (core)</div><div class="num" id="all_backlog_counts">0 parcels • 0 items</div></div>
+      <div class="col-3 tile"><div class="muted">Backlog (hours)</div><div class="num" id="all_backlog_h">0.0 unp • 0.0 proc</div></div>
+      <div class="col-3 tile"><div class="muted">To-Green (hours)</div><div class="num" id="all_green_h">0.0 unp • 0.0 proc</div></div>
+      <div class="col-3 tile"><div class="muted">Capacity & spare</div><div class="num" id="cap_spare">0.0h avail • 0.0h spare</div></div>
+    </div>
+  </div>
+
+  <!-- ===== TRACKER SECTIONS ===== -->
+  <!-- UK -->
+  <div class="card">
+    <h2>UK Couriers</h2>
+    <div class="legend">SLA UK: ≤3d 🟢 • ≤6d 🟠 • &gt;6d 🔴</div>
+    <div class="small" id="uk_totals"></div>
+
+    <h3 style="margin:10px 0 6px">Packed backlog (pallets by courier & date)</h3>
+    <div id="uk_wrap"></div>
+    <button class="btn out" type="button" onclick="addRow('uk')">+ Add UK row</button>
+
+    <h3 style="margin:16px 6px 6px">Already unpacked (parcels by date)</h3>
+    <div id="uk_unp_wrap"></div>
+    <button class="btn out" type="button" onclick="addRow('uk_unp')">+ Add UK unpacked row</button>
+
+    <div class="grid" style="margin-top:12px">
+      <div class="col-12">
+        <table id="uk_by_courier">
+          <thead><tr><th>Courier</th><th>Backlog parcels</th><th>To-Green parcels</th><th>Unpack hours</th><th>Oldest</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- INT -->
+  <div class="card">
+    <h2>International</h2>
+    <div class="legend">SLA INT: ≤5d 🟢 • ≤7d 🟠 • &gt;8d 🔴</div>
+
+    <h3 style="margin:10px 0 6px">Packed backlog (pallets by date)</h3>
+    <div id="int_wrap"></div>
+    <button class="btn out" type="button" onclick="addRow('int')">+ Add INT row</button>
+
+    <h3 style="margin:16px 6px 6px">Already unpacked (parcels by date)</h3>
+    <div id="int_unp_wrap"></div>
+    <button class="btn out" type="button" onclick="addRow('int_unp')">+ Add INT unpacked row</button>
+  </div>
+
+  <!-- RETURNS -->
+  <div class="card">
+    <h2>Special Returns (excluded)</h2>
+    <div class="legend">RTS • Mexico • Axima — 120 orders/pallet. Mexico/Axima: unpack 40/h; process 28/h. RTS: same person, 50 items/h combined. RTS SLA: ≤1d 🟢 • ≤2d 🟠 • &gt;4d 🔴.</div>
+    <div id="ret_wrap"></div>
+    <button class="btn out" type="button" onclick="addRow('ret')">+ Add Return row</button>
+  </div>
+
+  <div class="card">
+    <button class="btn" onclick="copySlack()">Copy Slack summary</button>
+  </div>
+
+</div>
+
+<script>
+/* ===== CONSTANTS & SLA ===== */
+const SLA={UK:{green:3,amber:6,red:6},INT:{green:5,amber:7,red:8}};
+const SLA_RET={RTS:{green:1,amber:2,red:4}, DEFAULT:{green:5,amber:7,red:8}};
+const PPL_UK_INT=140;      // parcels per pallet (UK & INT)
+const PPL_RET=120;         // orders per pallet (Returns)
+const MEX_UNP_RATE=40;     // items/h (Mexico/Axima unpack)
+const RTS_COMBINED_RATE=50;// items/h (RTS combined)
+let UNP_RATE=65, PROC_RATE=28, IPP=1.9;
+const H12=11, H9=8.5, H6=5.5;
+
+/* ===== UTIL ===== */
+const dAge=d=> (d? Math.floor((new Date()-new Date(d))/(1000*60*60*24)) : 0);
+const fmt=n=> (Math.round(n*10)/10).toFixed(1);
+const sumBy=(a,f)=> a.reduce((s,x)=>s+f(x),0);
+const badge=(age,thr)=>`<span class="badge ${age>thr.red?'b-bad':(age>thr.green?'b-warn':'b-good')}">${age>thr.red?'Red':(age>thr.green?'Amber':'Green')}</span>`;
+
+/* ===== DYNAMIC ROWS ===== */
+function addRow(type){
+  const wrap=document.getElementById(type+'_wrap'); const row=document.createElement('div'); row.className='grid rowline';
+  let c='';
+  if(type==='uk'){
+    c=`<div class="col-3"><label>Courier</label><select class="uk_courier"><option>ASDA</option><option>EVRI</option><option>INPOST</option></select></div>
+       <div class="col-4"><label>Date</label><input type="date" class="uk_date" oninput="this.nextElementSibling.innerHTML=badge(dAge(this.value),SLA.UK)"><div class="muted">${badge(0,SLA.UK)}</div></div>
+       <div class="col-4"><label>Pallets</label><input type="number" min="0" step="1" class="uk_pallets"></div>
+       <div class="col-1" style="display:flex;align-items:end"><button class="btn out" onclick="this.closest('.grid').remove();render()">×</button></div>`;
+  } else if(type==='uk_unp'){
+    c=`<div class="col-5"><label>Date (unpacked)</label><input type="date" class="uk_unp_date" oninput="this.nextElementSibling.innerHTML=badge(dAge(this.value),SLA.UK)"><div class="muted">${badge(0,SLA.UK)}</div></div>
+       <div class="col-6"><label>Parcels already unpacked</label><input type="number" min="0" step="1" class="uk_unp_parcels"></div>
+       <div class="col-1" style="display:flex;align-items:end"><button class="btn out" onclick="this.closest('.grid').remove();render()">×</button></div>`;
+  } else if(type==='int'){
+    c=`<div class="col-5"><label>Date</label><input type="date" class="int_date" oninput="this.nextElementSibling.innerHTML=badge(dAge(this.value),SLA.INT)"><div class="muted">${badge(0,SLA.INT)}</div></div>
+       <div class="col-6"><label>Pallets</label><input type="number" min="0" step="1" class="int_pallets"></div>
+       <div class="col-1" style="display:flex;align-items:end"><button class="btn out" onclick="this.closest('.grid').remove();render()">×</button></div>`;
+  } else if(type==='int_unp'){
+    c=`<div class="col-5"><label>Date (unpacked)</label><input type="date" class="int_unp_date" oninput="this.nextElementSibling.innerHTML=badge(dAge(this.value),SLA.INT)"><div class="muted">${badge(0,SLA.INT)}</div></div>
+       <div class="col-6"><label>Parcels already unpacked</label><input type="number" min="0" step="1" class="int_unp_parcels"></div>
+       <div class="col-1" style="display:flex;align-items:end"><button class="btn out" onclick="this.closest('.grid').remove();render()">×</button></div>`;
+  } else if(type==='ret'){
+    c=`<div class="col-3"><label>Type</label><select class="ret_courier"><option>RTS</option><option>MEXICO</option><option>AXIMA</option></select></div>
+       <div class="col-4"><label>Date</label><input type="date" class="ret_date" oninput="const t=this.closest('.grid').querySelector('.ret_courier').value; this.nextElementSibling.innerHTML=(t==='RTS'?badge(dAge(this.value),SLA_RET.RTS):badge(dAge(this.value),SLA_RET.DEFAULT))"><div class="muted">${badge(0,SLA_RET.RTS)}</div></div>
+       <div class="col-4"><label>Pallets</label><input type="number" min="0" step="1" class="ret_pallets"></div>
+       <div class="col-1" style="display:flex;align-items:end"><button class="btn out" onclick="this.closest('.grid').remove();render()">×</button></div>`;
+  }
+  row.innerHTML=c; wrap.appendChild(row);
+  row.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',render));
+  render();
+}
+
+/* ===== READ DATA ===== */
+const readPackedUK = () => {const a=[];document.querySelectorAll('#uk_wrap .grid').forEach(r=>a.push({courier:r.querySelector('.uk_courier')?.value||'ASDA',age:dAge(r.querySelector('.uk_date')?.value),pallets:+r.querySelector('.uk_pallets')?.value||0}));return a;}
+const readUnpackedUK = () => {const a=[];document.querySelectorAll('#uk_unp_wrap .grid').forEach(r=>a.push({age:dAge(r.querySelector('.uk_unp_date')?.value),parcels:+r.querySelector('.uk_unp_parcels')?.value||0}));return a;}
+const readPackedINT = () => {const a=[];document.querySelectorAll('#int_wrap .grid').forEach(r=>a.push({age:dAge(r.querySelector('.int_date')?.value),pallets:+r.querySelector('.int_pallets')?.value||0}));return a;}
+const readUnpackedINT = () => {const a=[];document.querySelectorAll('#int_unp_wrap .grid').forEach(r=>a.push({age:dAge(r.querySelector('.int_unp_date')?.value),parcels:+r.querySelector('.int_unp_parcels')?.value||0}));return a;}
+const readReturns = () => {const a=[];document.querySelectorAll('#ret_wrap .grid').forEach(r=>a.push({type:r.querySelector('.ret_courier')?.value||'RTS',age:dAge(r.querySelector('.ret_date')?.value),pallets:+r.querySelector('.ret_pallets')?.value||0}));return a;}
+
+/* ===== SECTION CALCS ===== */
+function planUK(packed, unpacked){
+  const cs=['ASDA','EVRI','INPOST'];
+  const backlogParByC = Object.fromEntries(cs.map(c=>[c, sumBy(packed.filter(x=>x.courier===c), x=>x.pallets)*PPL_UK_INT ]));
+  const backlogPar = sumBy(packed, x=>x.pallets)*PPL_UK_INT;
+  const toGreenParByC = Object.fromEntries(cs.map(c=>[c, sumBy(packed.filter(x=>x.courier===c && x.age>SLA.UK.green), x=>x.pallets)*PPL_UK_INT ]));
+  const toGreenPar = cs.reduce((a,c)=>a+(toGreenParByC[c]||0),0);
+  const toGreenProcItems = sumBy(unpacked.filter(x=>x.age>SLA.UK.green), x=>x.parcels)*IPP;
+  return { backlogParByC, backlogPar, toGreenParByC, toGreenPar, toGreenProcItems,
+           oldPacked: packed.length? Math.max(...packed.map(x=>x.age)):0,
+           oldUnp: unpacked.length? Math.max(...unpacked.map(x=>x.age)):0 };
+}
+function planINT(packed, unpacked){
+  const backlogPar = sumBy(packed, x=>x.pallets)*PPL_UK_INT;
+  const toGreenPar = sumBy(packed.filter(x=>x.age>SLA.INT.green), x=>x.pallets)*PPL_UK_INT;
+  const toGreenProcItems = sumBy(unpacked.filter(x=>x.age>SLA.INT.green), x=>x.parcels)*IPP;
+  const oldPacked = packed.length? Math.max(...packed.map(x=>x.age)):0;
+  const oldUnp    = unpacked.length? Math.max(...unpacked.map(x=>x.age)):0;
+  return { backlogPar, toGreenPar, toGreenProcItems, oldPacked, oldUnp };
+}
+function planRET(rows){
+  let old=0, need={RTS_proc:0,MEX_unp:0,MEX_proc:0,AXI_unp:0,AXI_proc:0};
+  rows.forEach(r=>{
+    old=Math.max(old,r.age||0);
+    const orders=r.pallets*PPL_RET;
+    if(r.type==='RTS'){ if(r.age>SLA_RET.RTS.green) need.RTS_proc += orders/RTS_COMBINED_RATE; }
+    else { if(r.age>SLA_RET.DEFAULT.green){
+      if(r.type==='MEXICO'){ need.MEX_unp += orders/MEX_UNP_RATE; need.MEX_proc += orders/PROC_RATE; }
+      else { need.AXI_unp += orders/MEX_UNP_RATE; need.AXI_proc += orders/PROC_RATE; }
+    }}
+  });
+  return { old, need, needUnpH: (need.MEX_unp+need.AXI_unp), needProcH: (need.RTS_proc+need.MEX_proc+need.AXI_proc) };
+}
+
+/* ===== EXACT ALLOCATOR (processor-first, storage-aware) ===== */
+function allocate(n12,n9,n6, needPar, needItems){
+  let best=null;
+  for(let u12=0; u12<=n12; u12++){
+    for(let u9=0; u9<=n9; u9++){
+      for(let u6=0; u6<=n6; u6++){
+        const p12=n12-u12, p9=n9-u9, p6=n6-u6;
+        const unpH  = u12*H12 + u9*H9 + u6*H6;
+        const procH = p12*H12 + p9*H9 + p6*H6;
+        const capPar   = unpH  * UNP_RATE;
+        const capItems = procH * PROC_RATE;
+
+        // only unpack what’s needed to feed processors and to meet parcel need
+        const maxParNeededToFeed = Math.max(0, needItems / IPP);
+        const plannedPar = Math.min(capPar, needPar, maxParNeededToFeed);
+        const itemsFromUnp = plannedPar * IPP;
+        const itemsDone = Math.min(capItems, itemsFromUnp, needItems);
+
+        const gapPar  = Math.max(0, needPar   - plannedPar);
+        const gapItem = Math.max(0, needItems - itemsDone);
+        const score = gapItem*1000 + gapPar*10; // prioritise items
+
+        if(!best || score < best.score){
+          best = {
+            u12,u9,u6,p12,p9,p6, unpH,procH,
+            plannedPar: Math.floor(plannedPar),
+            itemsDone: Math.floor(itemsDone),
+            gaps:{par:Math.floor(gapPar), item:Math.floor(gapItem)},
+            score
+          };
+        }
+      }
+    }
+  }
+  return best;
+}
+
+/* ===== RENDER ===== */
+function render(){
+  UNP_RATE=+document.getElementById('ach_unp').value||65;
+  PROC_RATE=+document.getElementById('ach_proc').value||28;
+  IPP=+document.getElementById('ach_ipp').value||1.9;
+
+  const n12=+document.getElementById('n12').value||0;
+  const n9 =+document.getElementById('n9').value||0;
+  const n6 =+document.getElementById('n6').value||0;
+  const H = n12*H12+n9*H9+n6*H6; document.getElementById('tot_avail').textContent=fmt(H);
+
+  // Read tracker rows
+  const ukP=readPackedUK(), ukU=readUnpackedUK();
+  const intP=readPackedINT(), intU=readUnpackedINT();
+  const rets=readReturns();
+
+  // Plans
+  const UK=planUK(ukP,ukU), INT=planINT(intP,intU), RET=planRET(rets);
+
+  // Stream overview table (quick)
+  const sov=document.querySelector('#uk_by_courier tbody'); sov.innerHTML='';
+  ['ASDA','EVRI','INPOST'].forEach(c=>{
+    const age=Math.max(0,...ukP.filter(x=>x.courier===c).map(x=>x.age||0),0);
+    const tg=UK.toGreenParByC[c]||0;
+    sov.insertAdjacentHTML('beforeend',
+      `<tr><td>${c}</td><td>${UK.backlogParByC[c]||0}</td><td>${tg}</td><td>${fmt(tg/UNP_RATE)}</td><td>${badge(age,SLA.UK)}</td></tr>`
+    );
+  });
+  document.getElementById('uk_totals').textContent =
+    `Backlog — ASDA ${UK.backlogParByC.ASDA||0}, EVRI ${UK.backlogParByC.EVRI||0}, INPOST ${UK.backlogParByC.INPOST||0}`;
+
+  // Workload to Green (core = UK+INT only)
+  const needPar  = UK.toGreenPar + INT.toGreenPar;
+  const needItems= UK.toGreenProcItems + INT.toGreenProcItems;
+
+  document.getElementById('need_today').textContent = `${needPar} parcels • ${Math.round(needItems)} items`;
+  document.getElementById('need_hours').textContent = `${fmt(needPar/UNP_RATE)}h unp • ${fmt(needItems/PROC_RATE)}h proc`;
+
+  // Allocate staff
+  const plan=allocate(n12,n9,n6, needPar, Math.round(needItems));
+
+  const planText =
+    `Unpack: ${plan.u12}×12h, ${plan.u9}×9h, ${plan.u6}×6h (${fmt(plan.unpH)}h) | ` +
+    `Process: ${plan.p12}×12h, ${plan.p9}×9h, ${plan.p6}×6h (${fmt(plan.procH)}h)`;
+  document.getElementById('staff_plan').textContent=planText;
+  document.getElementById('staff_cap').textContent =
+    `We will open ≈ ${plan.plannedPar} parcels and process ≈ ${plan.itemsDone} items`;
+  document.getElementById('gaps_line').textContent =
+    (plan.gaps.par===0&&plan.gaps.item===0)?'No gaps — plan keeps Green.':
+    `Gaps → ${plan.gaps.par} parcels • ${plan.gaps.item} items`;
+
+  // What to do today (plain English)
+  const bullets=[];
+  bullets.push(`Put **${plan.u12} people** on unpack for the **12h** group, **${plan.u9}** on **9h**, **${plan.u6}** on **6h**. The rest go to **processing**.`);
+  if(plan.gaps.item>0){
+    const addH=plan.gaps.item/PROC_RATE;
+    bullets.push(`Short **${plan.gaps.item} items** → add ~**${fmt(addH)}h** processing (e.g., 1×12h or 2×9h) or move one from unpack.`);
+  }
+  if(plan.gaps.par>0){
+    const addH=plan.gaps.par/UNP_RATE;
+    bullets.push(`Short **${plan.gaps.par} parcels** → add ~**${fmt(addH)}h** unpack or move one processor.`);
+  }
+  if(plan.gaps.par===0&&plan.gaps.item===0){
+    const spare=Math.max(0,H-(plan.unpH+plan.procH));
+    if(spare>0.1) bullets.push(`Spare ~**${fmt(spare)}h** — help Special Returns / value-add.`);
+  }
+  document.getElementById('what_to_do').innerHTML = bullets.join('  •  ');
+
+  // Global tiles
+  const backlogParAll = UK.backlogPar + INT.backlogPar;
+  const backlogItemsAll = Math.round(sumBy(ukU,x=>x.parcels)*IPP + sumBy(intU,x=>x.parcels)*IPP);
+  document.getElementById('all_backlog_counts').textContent = `${backlogParAll} parcels • ${backlogItemsAll} items`;
+  document.getElementById('all_backlog_h').textContent = `${fmt(backlogParAll/UNP_RATE)} unp • ${fmt((backlogItemsAll)/PROC_RATE)} proc`;
+  document.getElementById('all_green_h').textContent = `${fmt((needPar)/UNP_RATE)} unp • ${fmt((needItems)/PROC_RATE)} proc`;
+  const spareHours = Math.max(0, H - (plan.unpH+plan.procH));
+  document.getElementById('cap_spare').textContent = `${fmt(H)}h avail • ${fmt(spareHours)}h spare`;
+
+  // Save snapshot for Slack
+  window._SLK={H, plan, UK, INT, RET, needPar, needItems, spareHours};
+}
+
+/* ===== SLACK SUMMARY ===== */
+function copySlack(){
+  const S=window._SLK||{}, P=S.plan||{}, UK=S.UK||{}, INT=S.INT||{}, R=S.RET||{};
+  const text = [
+`*Return Processing — Today plan*`,
+`People-hours: ${fmt(S.H||0)}h`,
+`Targets: Unpack ${document.getElementById('ach_unp').value}/h • Process ${document.getElementById('ach_proc').value}/h • ${document.getElementById('ach_ipp').value} items/parcel`,
+
+`*Need to keep Green (from tracker)*`,
+`• Parcels: ${S.needPar||0} • Items: ${Math.round(S.needItems||0)}`,
+
+`*Staffing plan*`,
+`• Unpack: ${P.u12||0}×12h, ${P.u9||0}×9h, ${P.u6||0}×6h (${fmt(P.unpH||0)}h)`,
+`• Process: ${P.p12||0}×12h, ${P.p9||0}×9h, ${P.p6||0}×6h (${fmt(P.procH||0)}h)`,
+`• We’ll open ~${P.plannedPar||0} parcels and process ~${P.itemsDone||0} items`,
+(P.gaps&& (P.gaps.par||P.gaps.item)) ? `• Gaps: ${P.gaps.par||0} parcels • ${P.gaps.item||0} items` : `• Gaps: none (Green)`,
+
+`*UK to-Green*`,
+`• ASDA ${UK.toGreenParByC?.ASDA||0}p • EVRI ${UK.toGreenParByC?.EVRI||0}p • INPOST ${UK.toGreenParByC?.INPOST||0}p • Proc items ${Math.round(UK.toGreenProcItems||0)}`,
+
+`*INT to-Green*`,
+`• Unpack ${INT.toGreenPar||0}p • Proc items ${Math.round(INT.toGreenProcItems||0)}`,
+
+`*Returns need (hours)*`,
+`• RTS proc ~${fmt(R.needProcH||0)}h • Mexico unp ~${fmt(R.need?.MEX_unp||0)}h + proc ~${fmt(R.need?.MEX_proc||0)}h • Axima unp ~${fmt(R.need?.AXI_unp||0)}h + proc ~${fmt(R.need?.AXI_proc||0)}h`,
+
+`*Spare hours today:* ${fmt(S.spareHours||0)}h`
+  ].join('\n');
+
+  navigator.clipboard.writeText(text).then(()=>alert('Copied to clipboard'));
+}
+
+/* ===== INIT ===== */
+document.addEventListener('DOMContentLoaded', ()=>{
+  ['ach_unp','ach_proc','ach_ipp','n12','n9','n6'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.addEventListener('input',render);
+  });
+  // starter rows so the page isn’t blank
+  addRow('uk'); addRow('uk_unp'); addRow('int'); addRow('int_unp'); addRow('ret');
+  render();
+});
+</script>
+</body>
+</html>
